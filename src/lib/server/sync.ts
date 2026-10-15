@@ -130,17 +130,46 @@ async function syncChannel(yt: YouTubeData, channelId: string, log: Log) {
 
 // ---------- Data API: сводка ниши ----------
 
+// Запросы под формат канала: ищут именно «24 часа как…» и «выжил бы ты…», а не всю историю подряд.
+const FORMAT_QUERIES = [
+  "why you wouldn't survive 24 hours as a",
+  "24 hours as a medieval",
+  "would you survive as a",
+  "what it was like to be a",
+  "a day in the life of a",
+];
+
+type FoundVideo = Awaited<ReturnType<YouTubeData["videos"]>>[number];
+type ChannelInfo = Awaited<ReturnType<YouTubeData["channelsStats"]>> extends Map<string, infer V> ? V : never;
+
+async function upsertMarketVideo(v: FoundVideo, query: string, ch: ChannelInfo | undefined) {
+  const db = await getDb();
+  const values = {
+    kind: "competitor_video" as const, title: v.title, channel: v.channelTitle, url: `https://www.youtube.com/watch?v=${v.id}`,
+    views: v.views, publishedAt: v.publishedAt.slice(0, 10), publishedTs: new Date(v.publishedAt), tags: query, source: "api" as const,
+    externalId: `yt:${v.id}`, updatedAt: new Date(), channelId: v.channelId, channelSubs: ch?.subscribers ?? null,
+    channelVideos: ch?.videos ?? null, channelViews: ch?.views ?? null, channelThumb: ch?.thumb ?? null,
+    durationSec: v.durationSec, likes: v.likes, comments: v.comments,
+    description: v.description, ytTags: v.tags.join(", "), categoryId: v.categoryId, language: v.language,
+  };
+  const { kind: _k, source: _s, externalId: _e, tags: _t, ...update } = values;
+  await db.insert(schema.marketItems).values(values).onConflictDoUpdate({ target: schema.marketItems.externalId, set: update });
+  const h = { views: v.views, likes: v.likes, comments: v.comments };
+  await db.insert(schema.videoHistory).values({ videoId: v.id, day: day(new Date()), ...h })
+    .onConflictDoUpdate({ target: [schema.videoHistory.videoId, schema.videoHistory.day], set: h });
+}
+
 async function syncNiche(yt: YouTubeData, ownChannelId: string, log: Log) {
   const settings = await getSettings();
   const db = await getDb();
-  const queries = [...settings.sync.nicheQueries];
+  const queries = [...FORMAT_QUERIES, ...settings.sync.nicheQueries];
   if (settings.sync.addProjectRoles) {
     const active = await db.select().from(schema.projects)
       .where(and(eq(schema.projects.kind, "long"), eq(schema.projects.legacy, false), inArray(schema.projects.status, ["draft", "in_progress"])))
       .orderBy(desc(schema.projects.updatedAt));
-    for (const p of active.slice(0, 3)) if (p.params.role) queries.push(`${p.params.role} history`);
+    for (const p of active.slice(0, 2)) if (p.params.role) queries.push(`24 hours as a ${p.params.role}`);
   }
-  const unique = [...new Set(queries.map((q) => q.trim()).filter(Boolean))].slice(0, 10);
+  const unique = [...new Set(queries.map((q) => q.trim().toLowerCase()).filter(Boolean))].slice(0, 12);
   const after = addDays(new Date(), -settings.sync.publishedWithinDays).toISOString();
   const found = new Map<string, string>(); // videoId → запрос
   for (const q of unique) {
@@ -155,28 +184,63 @@ async function syncNiche(yt: YouTubeData, ownChannelId: string, log: Log) {
   // Освежаем и уже известные ролики (не скрытые): просмотры растут, это видно по «скорости».
   const known = await db.select({ ext: schema.marketItems.externalId, tags: schema.marketItems.tags }).from(schema.marketItems)
     .where(and(eq(schema.marketItems.source, "api"), eq(schema.marketItems.hidden, false)));
+  const knownIds = new Set(known.map((k) => k.ext?.replace(/^yt:/, "")).filter(Boolean));
   for (const k of known) {
     const id = k.ext?.replace(/^yt:/, "");
-    if (id && !found.has(id) && found.size < 400) found.set(id, k.tags);
+    if (id && !found.has(id) && found.size < 500) found.set(id, k.tags);
   }
   const vids = (await yt.videos([...found.keys()])).filter((v) => v.channelId !== ownChannelId);
   const channels = await yt.channelsStats([...new Set(vids.map((v) => v.channelId))]);
-  for (const v of vids) {
-    const values = {
-      kind: "competitor_video" as const, title: v.title, channel: v.channelTitle, url: `https://www.youtube.com/watch?v=${v.id}`,
-      views: v.views, publishedAt: v.publishedAt.slice(0, 10), tags: found.get(v.id) ?? "", source: "api" as const,
-      externalId: `yt:${v.id}`, updatedAt: new Date(), channelId: v.channelId, channelSubs: channels.get(v.channelId)?.subscribers ?? null,
-      durationSec: v.durationSec, likes: v.likes, comments: v.comments,
-    };
-    await db.insert(schema.marketItems).values(values).onConflictDoUpdate({
-      target: schema.marketItems.externalId,
-      set: { title: values.title, channel: values.channel, views: values.views, updatedAt: values.updatedAt, channelId: values.channelId, channelSubs: values.channelSubs, durationSec: values.durationSec, likes: values.likes, comments: values.comments },
-    });
-    const h = { views: v.views, likes: v.likes, comments: v.comments };
-    await db.insert(schema.videoHistory).values({ videoId: v.id, day: day(new Date()), ...h })
-      .onConflictDoUpdate({ target: [schema.videoHistory.videoId, schema.videoHistory.day], set: h });
-  }
+  for (const v of vids) await upsertMarketVideo(v, found.get(v.id) ?? "", channels.get(v.channelId));
   log.ok(`Сводка ниши: ${unique.length} запросов, ${vids.length} роликов конкурентов обновлено.`);
+
+  // Каналы формата: забираем их последние загрузки целиком — 1–2 единицы квоты на канал вместо 100 за поиск.
+  try {
+    const { enrichedMarket } = await import("./niche");
+    const { all } = await enrichedMarket();
+    const fmt = new Map<string, number>();
+    for (const e of all) if (e.formatChannel && e.channelId && e.channelId !== ownChannelId && !e.hidden) fmt.set(e.channelId, (fmt.get(e.channelId) ?? 0) + e.sim);
+    const top = [...fmt].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id]) => id);
+    const chInfo = await yt.channelsStats(top);
+    let added = 0;
+    for (const id of top) {
+      const uploads = chInfo.get(id)?.uploads;
+      if (!uploads) continue;
+      const ids = (await yt.playlistVideoIds(uploads, 50)).filter((x) => !knownIds.has(x) && !found.has(x));
+      if (!ids.length) continue;
+      const fresh = (await yt.videos(ids)).filter((v) => new Date(v.publishedAt) >= new Date(after));
+      for (const v of fresh) await upsertMarketVideo(v, `канал формата: ${v.channelTitle}`, chInfo.get(id));
+      added += fresh.length;
+    }
+    if (top.length) log.ok(`Каналы формата: ${top.length}, новых роликов из их загрузок — ${added}.`);
+  } catch (e) {
+    log.warn(`Каналы формата: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // Комментарии под сильными похожими роликами: из них совет берёт просьбы зрителей.
+  try {
+    const { nicheModel } = await import("./niche");
+    const { similar } = await nicheModel();
+    const fresh = new Set((await db.select({ v: schema.marketComments.videoId, t: schema.marketComments.fetchedAt }).from(schema.marketComments))
+      .filter((r) => Date.now() - new Date(r.t).getTime() < 3 * 86400000).map((r) => r.v));
+    const targets = similar.filter((e) => e.videoId && !fresh.has(e.videoId) && (e.comments ?? 0) > 0).slice(0, 12);
+    let n = 0;
+    for (const e of targets) {
+      try {
+        const rows = await yt.topComments(e.videoId!, 40);
+        for (const c of rows) {
+          const v = { id: c.id, videoId: e.videoId!, author: c.author, text: c.text, likes: c.likes, replies: c.replies, publishedAt: new Date(c.publishedAt), fetchedAt: new Date() };
+          await db.insert(schema.marketComments).values(v).onConflictDoUpdate({ target: schema.marketComments.id, set: { likes: v.likes, replies: v.replies, fetchedAt: v.fetchedAt } });
+          n++;
+        }
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 403)) throw err; // комментарии отключены — пропускаем ролик
+      }
+    }
+    if (targets.length) log.ok(`Комментарии: ${n} под ${targets.length} похожими роликами.`);
+  } catch (e) {
+    log.warn(`Комментарии: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 // ---------- Analytics ----------

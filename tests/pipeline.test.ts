@@ -125,3 +125,31 @@ test("voice split: CSV с кавычками и разбивка по актам
   assert.equal(parts.flat().length, 30);
   assert.equal(parts[1][0].shot % 10, 1); // часть начинается со смены акта
 });
+
+import { roleOf, extractRequests, enrich, buildAdvice } from "../src/lib/niche";
+test("ниша: роль из названия, просьбы из комментариев, сходство и совет", () => {
+  assert.equal(roleOf("Why You Wouldn't Survive 24 Hours as a Pirate"), "pirate");
+  assert.equal(roleOf("What It Was Like to Be a Victorian Chimney Sweep"), "victorian chimney sweep");
+  assert.equal(roleOf("Why Life as a Viking was Hell"), "viking");
+  const req = extractRequests([{ text: "Do the samurai next please", likes: 5 }, { text: "Please do a video on Spartan soldiers next!", likes: 40 }]);
+  assert.deepEqual(req.map((r) => r.topic).sort(), ["samurai", "spartan soldiers"]);
+  const mk = (id: number, title: string, views: number, subs: number, dur = 600) => ({
+    id, title, channel: "C" + (id % 3), channelId: "UC" + (id % 3), url: null, views, likes: views / 30, comments: views / 500, durationSec: dur,
+    publishedAt: "2026-05-01", channelSubs: subs, tags: "", hidden: false, pinned: false, externalId: `yt:VID${String(id).padStart(8, "0")}`,
+  });
+  const items = [
+    mk(1, "Why You Wouldn't Survive 24 Hours as a Samurai", 2_000_000, 10_000),
+    mk(2, "Why You Wouldn't Survive 24 Hours as a Viking", 50_000, 10_000),
+    mk(3, "I Survived 24 Hours in a Treehouse", 9_000_000, 5_000_000, 900),
+    mk(4, "Why You Wouldn't Survive 24 Hours as a Spartan", 900_000, 20_000),
+    mk(5, "Would You Survive as an Aztec Warrior?", 30_000, 20_000),
+  ];
+  const mine = [{ title: "Why You Wouldn't Survive 24 Hours as a Pirate", durationSec: 520, isShort: false, views: 400, publishedAt: "2026-10-01" }];
+  const e = enrich(items, mine);
+  const by = (id: number) => e.find((x) => x.id === id)!;
+  assert.ok(by(1).sim >= 75, "тот же формат — высокое сходство");
+  assert.ok(by(3).sim < 55, "челлендж блогера — не похож");
+  assert.ok(by(1).power > by(2).power, "обогнал канал сильнее — сильнее");
+  const a = buildAdvice(e.filter((x) => x.sim >= 55), mine, []);
+  assert.ok(a.n >= 4 && a.tips.length > 0);
+});

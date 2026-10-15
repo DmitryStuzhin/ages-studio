@@ -290,3 +290,13 @@ export async function startFragmentAction(projectId: number, from: number, to: n
   const { startFragmentVoice } = await import("@/lib/server/voice");
   return wrap(() => startFragmentVoice(projectId, from, to), ["/"], "Переозвучка куска запущена");
 }
+
+export async function lookupVoiceAction(id: string) {
+  const { lookupVoice } = await import("@/lib/server/voice");
+  try { return { ok: true as const, ...(await lookupVoice(id)) }; } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+export async function testVoiceAction(id: string, model: string, text: string) {
+  const { testVoice } = await import("@/lib/server/voice");
+  try { return { ok: true as const, ...(await testVoice(id, model, text)) }; } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) }; }
+}

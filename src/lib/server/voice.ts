@@ -4,7 +4,7 @@ import path from "node:path";
 import { getCanon, expandHome } from "./canon";
 import { getProject, getSettings } from "./repo";
 import { pipelineRoot, slugFor } from "./pipeline";
-import { elevenKey, listVoices, subscription, tts, writeDotEnv, type Subscription, type Voice } from "@/lib/integrations/elevenlabs";
+import { elevenKey, listVoices, getVoice, subscription, tts, writeDotEnv, type Subscription, type Voice } from "@/lib/integrations/elevenlabs";
 import { voiceShots, splitParts, partText, type VoiceShot } from "@/lib/pipeline/voice-split";
 
 // Озвучка из платформы: берёт колонку voice из storyboard.csv в папке ролика (источник правды —
@@ -148,20 +148,45 @@ export async function startFragmentVoice(projectId: number, from: number, to: nu
 
 // ---------- Настройки ----------
 
-export type ElevenState = { keyWhere: "env" | "pipeline" | null; sub: Subscription | null; voices: Voice[]; error: string | null; pipelineEnv: string };
+export type ElevenState = { keyWhere: "env" | "pipeline" | null; sub: Subscription | null; voices: Voice[]; current: Voice | null; error: string | null; pipelineEnv: string };
 
 export async function elevenState(): Promise<ElevenState> {
   const canon = await getCanon();
+  const settings = await getSettings();
   const dir = expandHome(canon.pipelineDir);
   const pipelineEnv = path.join(dir, ".env");
   const { key, where } = await elevenKey(dir);
-  if (!key) return { keyWhere: null, sub: null, voices: [], error: null, pipelineEnv };
+  if (!key) return { keyWhere: null, sub: null, voices: [], current: null, error: null, pipelineEnv };
   try {
     const [sub, voices] = await Promise.all([subscription(key), listVoices(key)]);
-    return { keyWhere: where, sub, voices, error: null, pipelineEnv };
+    const id = settings.elevenlabs.voiceId;
+    const current = !id ? null : voices.find((v) => v.id === id) ?? (await getVoice(key, id).catch(() => null))
+      ?? { id, name: settings.elevenlabs.voiceName || id, category: "по ID", labels: "", tags: [], description: "", preview: null };
+    return { keyWhere: where, sub, voices, current, error: null, pipelineEnv };
   } catch (e) {
-    return { keyWhere: where, sub: null, voices: [], error: e instanceof Error ? e.message : String(e), pipelineEnv };
+    return { keyWhere: where, sub: null, voices: [], current: null, error: e instanceof Error ? e.message : String(e), pipelineEnv };
   }
+}
+
+async function keyOnly() {
+  const canon = await getCanon();
+  const { key } = await elevenKey(expandHome(canon.pipelineDir));
+  if (!key) throw new Error("Сначала сохрани ключ ElevenLabs.");
+  return key;
+}
+
+export async function lookupVoice(id: string) {
+  const clean = id.trim().replace(/^.*[/=]/, ""); // можно вставить ссылку на голос целиком
+  if (!/^[A-Za-z0-9]{10,40}$/.test(clean)) throw new Error("ID голоса — 20 латинских букв и цифр, например 21m00Tcm4TlvDq8ikWAM.");
+  return { id: clean, voice: await getVoice(await keyOnly(), clean) };
+}
+
+/** Пробная фраза голосом — тратит столько кредитов, сколько в ней символов. */
+export async function testVoice(id: string, model: string, text: string) {
+  const t = text.trim().slice(0, 300);
+  if (!t) throw new Error("Пустая фраза");
+  const buf = await tts(await keyOnly(), { voiceId: id, model, text: t });
+  return { audio: `data:audio/mpeg;base64,${buf.toString("base64")}`, chars: t.length };
 }
 
 /** Ключ хранится в .env конвейера: его же читают check_voice.py и voice.py. */

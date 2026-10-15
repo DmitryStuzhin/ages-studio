@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, jsonb, real, date, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, jsonb, real, date, primaryKey, bigint } from "drizzle-orm/pg-core";
 
 export const promptVersions = pgTable("prompt_versions", {
   id: serial("id").primaryKey(),
@@ -148,8 +148,28 @@ export const marketItems = pgTable("market_items", {
   hidden: boolean("hidden").notNull().default(false),
   /** Отмечен автором как важный референс: всегда попадает в промпты первым. */
   pinned: boolean("pinned").notNull().default(false),
+  description: text("description"),
+  /** Теги ролика из YouTube (через запятую). Поле tags выше — поисковый запрос, по которому ролик найден. */
+  ytTags: text("yt_tags"),
+  categoryId: text("category_id"),
+  language: text("language"),
+  publishedTs: timestamp("published_ts", { withTimezone: true }),
+  channelVideos: integer("channel_videos"),
+  channelViews: bigint("channel_views", { mode: "number" }),
+  channelThumb: text("channel_thumb"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const marketComments = pgTable("market_comments", {
+  id: text("id").primaryKey(),
+  videoId: text("video_id").notNull(),
+  author: text("author").notNull().default(""),
+  text: text("text").notNull(),
+  likes: integer("likes").notNull().default(0),
+  replies: integer("replies").notNull().default(0),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const channelVideos = pgTable("channel_videos", {

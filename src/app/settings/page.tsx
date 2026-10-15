@@ -59,7 +59,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <section id="elevenlabs" className="mb-6 scroll-mt-6">
         <Section title="ElevenLabs">
-          <ElevenConnect state={await elevenState()} voiceId={settings.elevenlabs.voiceId} model={settings.elevenlabs.model} />
+          <ElevenConnect state={await elevenState()} model={settings.elevenlabs.model} />
         </Section>
       </section>
 

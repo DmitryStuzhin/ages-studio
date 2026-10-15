@@ -60,14 +60,39 @@ async function call(key: string, p: string, init?: RequestInit & { timeoutMs?: n
   return res;
 }
 
-export type Voice = { id: string; name: string; category: string; labels: string; preview: string | null };
+export type Voice = { id: string; name: string; category: string; labels: string; tags: string[]; description: string; preview: string | null };
+
+type RawVoice = { voice_id: string; name?: string; category?: string; labels?: Record<string, string>; preview_url?: string | null; description?: string | null };
+const LABEL_RU: Record<string, string> = {
+  male: "мужской", female: "женский", neutral: "нейтральный", young: "молодой", "middle aged": "средних лет", "middle-aged": "средних лет", old: "пожилой",
+  american: "американский", british: "британский", australian: "австралийский", irish: "ирландский", "us": "американский",
+  narration: "дикторский", narrative_story: "рассказчик", "narrative & story": "рассказчик", informative_educational: "образовательный", conversational: "разговорный",
+  characters_animation: "персонажи", social_media: "соцсети", entertainment_tv: "ТВ", advertisement: "реклама",
+  calm: "спокойный", deep: "глубокий", warm: "тёплый", raspy: "хрипловатый", confident: "уверенный", casual: "непринуждённый", crisp: "чёткий",
+};
+const ru = (v: string) => LABEL_RU[v.toLowerCase()] ?? v.replace(/_/g, " ");
+function toVoice(v: RawVoice): Voice {
+  const tags = Object.entries(v.labels ?? {}).filter(([k, x]) => x && k !== "language").map(([, x]) => ru(x));
+  return {
+    id: v.voice_id, name: v.name ?? v.voice_id, category: v.category ?? "",
+    labels: tags.join(", "), tags, description: (v.description ?? "").trim(), preview: v.preview_url ?? null,
+  };
+}
 
 export async function listVoices(key: string): Promise<Voice[]> {
-  const j = await (await call(key, "/v1/voices")).json() as { voices?: { voice_id: string; name: string; category?: string; labels?: Record<string, string>; preview_url?: string }[] };
-  return (j.voices ?? []).map((v) => ({
-    id: v.voice_id, name: v.name, category: v.category ?? "",
-    labels: Object.values(v.labels ?? {}).filter(Boolean).join(", "), preview: v.preview_url ?? null,
-  })).sort((a, b) => (a.category === "premade" ? 1 : 0) - (b.category === "premade" ? 1 : 0) || a.name.localeCompare(b.name));
+  const j = await (await call(key, "/v1/voices")).json() as { voices?: RawVoice[] };
+  return (j.voices ?? []).map(toVoice)
+    .sort((a, b) => (a.category === "premade" ? 1 : 0) - (b.category === "premade" ? 1 : 0) || a.name.localeCompare(b.name));
+}
+
+/** Голос по ID: свой, стандартный или добавленный из библиотеки. null — если ElevenLabs его не отдаёт этому ключу. */
+export async function getVoice(key: string, id: string): Promise<Voice | null> {
+  try {
+    return toVoice(await (await call(key, `/v1/voices/${encodeURIComponent(id)}`)).json() as RawVoice);
+  } catch (e) {
+    if (e instanceof Error && /ElevenLabs (400|404|422)/.test(e.message)) return null;
+    throw e;
+  }
 }
 
 export type Subscription = { tier: string; used: number; limit: number; resetAt: string | null };

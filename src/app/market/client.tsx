@@ -126,3 +126,12 @@ export function Pager({ page, pages }: { page: number; pages: number }) {
     </nav>
   );
 }
+
+export function CopyText({ text, label, className }: { text: string; label: string; className?: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" className={clsx("btn btn-sm", className)} onClick={async () => { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1800); }}>
+      {done ? "Скопировано" : label}
+    </button>
+  );
+}

@@ -6,7 +6,7 @@ import { Section } from "@/components/ui";
 import { useAction } from "@/components/use-action";
 import { disconnectGoogleAction, saveSettingsAction, saveCanonAction, importCanonAction, saveElevenKeyAction, saveVoiceAction } from "@/app/actions";
 import type { ElevenState } from "@/lib/server/voice";
-import { Play, Square } from "lucide-react";
+import { VoicePicker } from "./voice-picker";
 import type { Canon } from "@/lib/canon";
 
 export function SettingsForm({ initial }: { initial: AppSettings }) {
@@ -17,8 +17,9 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
   const charsPerVideo = Math.round(s.defaults.durationMin * s.defaults.wordsPerMinute * 6);
   const creditsPerVideo = Math.round(charsPerVideo * s.elevenlabs.creditsPerChar);
   const videosPerMonth = creditsPerVideo ? s.elevenlabs.monthlyCredits / creditsPerVideo : 0;
-  const queries = s.sync.nicheQueries.filter((q) => q.trim()).length + (s.sync.addProjectRoles ? 3 : 0);
-  const quota = Math.min(10, queries) * 101 + 8;
+  const queries = s.sync.nicheQueries.filter((q) => q.trim()).length + (s.sync.addProjectRoles ? 2 : 0);
+  // 5 запросов формата идут всегда; плюс загрузки 8 каналов формата и комментарии под 12 роликами — ~40 единиц.
+  const quota = Math.min(12, queries + 5) * 101 + 50;
   const runs = Math.max(1, Math.floor(24 / Math.max(1, s.sync.intervalHours)));
 
   return (
@@ -66,7 +67,7 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
           </label>
           <label className="flex gap-2 text-sm text-mist sm:col-span-3">
             <input type="checkbox" className="mt-1 accent-[var(--color-lapis)]" checked={s.sync.addProjectRoles} onChange={(e) => upd("sync", { addProjectRoles: e.target.checked })} />
-            Добавлять запрос по роли каждого ролика в работе (до трёх)
+            Добавлять запрос по роли каждого ролика в работе (до двух). Пять запросов под формат «24 часа как…» идут всегда.
           </label>
         </div>
         <p className="mt-3 text-[0.92rem] text-mist">
@@ -161,31 +162,12 @@ export function CanonForm({ initial }: { initial: Canon }) {
   );
 }
 
-const MODELS = [
-  { id: "eleven_v3", name: "Eleven v3 — понимает теги [whispers], [tense], паузы (нужна для твоего сценария)" },
-  { id: "eleven_multilingual_v2", name: "Multilingual v2 — без тегов: прочитает их вслух" },
-];
-
-export function ElevenConnect({ state, voiceId, model }: { state: ElevenState; voiceId: string; model: string }) {
+export function ElevenConnect({ state, model }: { state: ElevenState; model: string }) {
   const { pending, run } = useAction();
   const [key, setKey] = useState("");
-  const [vid, setVid] = useState(voiceId);
-  const [mdl, setMdl] = useState(model || "eleven_v3");
-  const [playing, setPlaying] = useState<HTMLAudioElement | null>(null);
-  const voice = state.voices.find((v) => v.id === vid);
   const left = state.sub ? Math.max(0, state.sub.limit - state.sub.used) : null;
-
-  const preview = (url: string | null) => {
-    playing?.pause();
-    if (!url || playing) { setPlaying(null); return; }
-    const a = new Audio(url);
-    a.onended = () => setPlaying(null);
-    a.play().catch(() => setPlaying(null));
-    setPlaying(a);
-  };
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
         <div className={state.keyWhere && !state.error ? "text-sm text-malachite" : state.error ? "text-sm text-cinnabar" : "text-sm text-fog"}>
           {state.error ? state.error : state.keyWhere ? `Ключ работает${state.sub ? ` · тариф ${state.sub.tier}` : ""}` : "Ключ не задан — озвучка в ручном режиме"}
@@ -203,32 +185,7 @@ export function ElevenConnect({ state, voiceId, model }: { state: ElevenState; v
           <button className="btn" disabled={pending || !key.trim()} onClick={() => run(() => saveElevenKeyAction(key), () => setKey(""))}>Проверить и сохранить</button>
         </div>
       </div>
-
-      {state.voices.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="label" htmlFor="voice">Голос</label>
-            <div className="flex gap-2">
-              <select id="voice" className="field min-w-0 flex-1" value={vid} onChange={(e) => { setVid(e.target.value); playing?.pause(); setPlaying(null); }}>
-                <option value="">— выбери голос —</option>
-                {state.voices.map((v) => <option key={v.id} value={v.id}>{v.name}{v.category && v.category !== "premade" ? " · мой" : ""}{v.labels ? ` — ${v.labels}` : ""}</option>)}
-              </select>
-              <button className="btn btn-ghost" disabled={!voice?.preview} onClick={() => preview(voice?.preview ?? null)} aria-label={playing ? "Остановить пример" : "Послушать пример"}>
-                {playing ? <Square size={15} /> : <Play size={15} />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="label" htmlFor="model">Модель</label>
-            <select id="model" className="field" value={mdl} onChange={(e) => setMdl(e.target.value)}>
-              {MODELS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <button className="btn btn-primary" disabled={pending || !vid || (vid === voiceId && mdl === model)} onClick={() => run(() => saveVoiceAction(vid, voice?.name ?? vid, mdl))}>Сохранить голос и модель</button>
-          </div>
-        </div>
-      )}
+      {state.keyWhere && !state.error && <div className="border-t border-line pt-5"><VoicePicker voices={state.voices} current={state.current} model={model} credits={left} /></div>}
     </div>
   );
 }

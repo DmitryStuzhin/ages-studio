@@ -52,12 +52,15 @@ export function videoIdFromUrl(url: string | null | undefined) {
 export type VideoStats = {
   id: string; title: string; channelId: string; channelTitle: string; publishedAt: string;
   durationSec: number | null; views: number | null; likes: number | null; comments: number | null;
+  description: string; tags: string[]; categoryId: string | null; language: string | null;
 };
+
+export type CommentRow = { id: string; author: string; text: string; likes: number; publishedAt: string; replies: number };
 
 type VideosResponse = {
   items: {
     id: string;
-    snippet: { title: string; channelId: string; channelTitle: string; publishedAt: string };
+    snippet: { title: string; channelId: string; channelTitle: string; publishedAt: string; description?: string; tags?: string[]; categoryId?: string; defaultAudioLanguage?: string; defaultLanguage?: string };
     contentDetails?: { duration?: string };
     statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
   }[];
@@ -94,15 +97,30 @@ export class YouTubeData {
 
   /** Статистика нескольких каналов за 1 единицу квоты на 50 каналов. */
   async channelsStats(ids: string[]) {
-    const out = new Map<string, { subscribers: number | null; views: number | null; videos: number | null; title: string }>();
+    const out = new Map<string, { subscribers: number | null; views: number | null; videos: number | null; title: string; uploads: string | null; thumb: string | null }>();
     for (let i = 0; i < ids.length; i += 50) {
       this.units += 1;
-      const r = await getJson<{ items?: { id: string; snippet: { title: string }; statistics: { subscriberCount?: string; viewCount?: string; videoCount?: string } }[] }>(
-        this.url("channels", { part: "snippet,statistics", id: ids.slice(i, i + 50).join(",") }),
+      const r = await getJson<{ items?: { id: string; snippet: { title: string; thumbnails?: { default?: { url: string } } }; statistics: { subscriberCount?: string; viewCount?: string; videoCount?: string }; contentDetails?: { relatedPlaylists?: { uploads?: string } } }[] }>(
+        this.url("channels", { part: "snippet,statistics,contentDetails", id: ids.slice(i, i + 50).join(",") }),
       );
-      for (const c of r.items ?? []) out.set(c.id, { title: c.snippet.title, subscribers: n(c.statistics.subscriberCount), views: n(c.statistics.viewCount), videos: n(c.statistics.videoCount) });
+      for (const c of r.items ?? []) out.set(c.id, {
+        title: c.snippet.title, subscribers: n(c.statistics.subscriberCount), views: n(c.statistics.viewCount), videos: n(c.statistics.videoCount),
+        uploads: c.contentDetails?.relatedPlaylists?.uploads ?? null, thumb: c.snippet.thumbnails?.default?.url ?? null,
+      });
     }
     return out;
+  }
+
+  /** Самые залайканные комментарии ролика: 1 единица квоты. */
+  async topComments(videoId: string, max = 30): Promise<CommentRow[]> {
+    this.units += 1;
+    const r = await getJson<{ items?: { id: string; snippet: { totalReplyCount?: number; topLevelComment: { snippet: { authorDisplayName: string; textOriginal?: string; textDisplay: string; likeCount?: number; publishedAt: string } } } }[] }>(
+      this.url("commentThreads", { part: "snippet", videoId, order: "relevance", maxResults: Math.min(100, max), textFormat: "plainText" }),
+    );
+    return (r.items ?? []).map((t) => {
+      const c = t.snippet.topLevelComment.snippet;
+      return { id: t.id, author: c.authorDisplayName, text: (c.textOriginal ?? c.textDisplay).slice(0, 600), likes: c.likeCount ?? 0, publishedAt: c.publishedAt, replies: t.snippet.totalReplyCount ?? 0 };
+    });
   }
 
   async playlistVideoIds(playlistId: string, max = 200) {
@@ -129,6 +147,8 @@ export class YouTubeData {
           id: v.id, title: v.snippet.title, channelId: v.snippet.channelId, channelTitle: v.snippet.channelTitle,
           publishedAt: v.snippet.publishedAt, durationSec: isoDuration(v.contentDetails?.duration),
           views: n(v.statistics?.viewCount), likes: n(v.statistics?.likeCount), comments: n(v.statistics?.commentCount),
+          description: (v.snippet.description ?? "").slice(0, 1500), tags: v.snippet.tags ?? [], categoryId: v.snippet.categoryId ?? null,
+          language: v.snippet.defaultAudioLanguage ?? v.snippet.defaultLanguage ?? null,
         });
       }
     }
@@ -136,12 +156,12 @@ export class YouTubeData {
   }
 
   /** Поиск роликов. Дорогая операция: 100 единиц квоты за вызов. */
-  async search(q: string, opts: { maxResults: number; publishedAfter?: string }) {
+  async search(q: string, opts: { maxResults: number; publishedAfter?: string; order?: "viewCount" | "relevance" }) {
     this.units += 100;
     const r = await getJson<{ items: { id: { videoId?: string } }[] }>(
       this.url("search", {
         part: "snippet", type: "video", q, maxResults: Math.min(50, opts.maxResults),
-        order: "viewCount", relevanceLanguage: "en", videoDuration: "medium", publishedAfter: opts.publishedAfter,
+        order: opts.order ?? "viewCount", relevanceLanguage: "en", videoDuration: "medium", publishedAfter: opts.publishedAfter,
       }),
     );
     return r.items.map((i) => i.id.videoId).filter((x): x is string => Boolean(x));

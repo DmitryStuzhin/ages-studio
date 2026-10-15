@@ -10,7 +10,7 @@ import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ new?: string; role?: string }> }) {
   const sp = await searchParams;
   const projects = await listProjects();
   const rows = await Promise.all(projects.map(async (p) => {
@@ -34,7 +34,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             <input type="hidden" name="kind" value="long" />
             <div>
               <label className="label" htmlFor="role">Роль, если уже выбрана</label>
-              <input id="role" name="role" className="field" placeholder="Например: Victorian Chimney Sweep" autoFocus={sp.new === "long"} />
+              <input id="role" name="role" className="field" placeholder="Например: Victorian Chimney Sweep" autoFocus={sp.new === "long"} defaultValue={sp.role ? sp.role.replace(/\b\w/g, (c) => c.toUpperCase()) : undefined} />
               <p className="mt-1.5 text-xs text-fog">Оставь пустым — шаг 0 предложит 5 ролей по сводке ниши и канала.</p>
             </div>
             <button className="btn btn-primary">Создать ролик</button>

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  ResponsiveContainer, Tooltip, XAxis, YAxis, Scatter, ScatterChart, ZAxis, ReferenceArea,
 } from "recharts";
 import clsx from "clsx";
 import { SERIES } from "./series";
@@ -178,3 +178,63 @@ export function Sparkline({ data, color = SERIES.long, height = 36 }: { data: nu
   );
 }
 
+
+type NichePoint = { x: number; y: number; z: number; title: string; channel: string; href?: string; views: number };
+
+function NicheTip({ active, payload }: { active?: boolean; payload?: { payload: NichePoint }[] }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="max-w-72 rounded-md border border-line-2 bg-ink px-3 py-2 text-[0.8rem] shadow-xl">
+      <div className="line-clamp-2 text-bone">{p.title}</div>
+      <div className="mt-0.5 text-fog">{p.channel}</div>
+      <div className="mt-1 tabular-nums text-mist">{p.x.toFixed(1).replace(".", ",")} мин · {compactNum(p.views)} просм. · ×{p.y >= 10 ? Math.round(p.y) : p.y.toFixed(1).replace(".", ",")} к подписчикам</div>
+    </div>
+  );
+}
+
+/** Длина ролика против «обогнал свой канал»: где лежат сильные похожие и где твои. Ось Y логарифмическая. */
+export function NicheScatter({ similar, mine, band }: { similar: NichePoint[]; mine: NichePoint[]; band?: [number, number] }) {
+  const reduced = useReducedMotion();
+  const ys = [...similar, ...mine].map((p) => p.y).filter((y) => y > 0);
+  const lo = Math.max(0.001, Math.min(...ys, 1) / 1.5), hi = Math.max(...ys, 1) * 1.5;
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <ScatterChart margin={{ top: 10, right: 12, left: -6, bottom: 4 }}>
+        <CartesianGrid stroke="var(--color-line)" strokeOpacity={0.5} />
+        {band && <ReferenceArea x1={band[0]} x2={band[1]} fill={SERIES.long} fillOpacity={0.08} stroke="none" label={{ value: "длина сильных", fill: "var(--color-fog)", fontSize: 11, position: "insideTop" }} />}
+        <XAxis type="number" dataKey="x" name="Длина" unit=" мин" {...AXIS} domain={[0, "dataMax + 2"]} allowDecimals={false} />
+        <YAxis type="number" dataKey="y" name="×" scale="log" domain={[lo, hi]} {...AXIS} width={44} tickFormatter={(v: number) => `×${v >= 1 ? Math.round(v) : v.toFixed(2).replace(/0+$/, "")}`} allowDataOverflow />
+        <ZAxis type="number" dataKey="z" range={[30, 260]} />
+        <ReferenceLine y={1} stroke="var(--color-line-2)" strokeDasharray="3 3" />
+        <Tooltip content={<NicheTip />} cursor={{ strokeDasharray: "3 3", stroke: "var(--color-line-2)" }} />
+        <Legend wrapperStyle={legendStyle} iconType="circle" iconSize={8} />
+        <Scatter name="Похожие ролики" data={similar} fill={SERIES.long} fillOpacity={0.7} stroke="var(--color-ink-2)" strokeWidth={1} isAnimationActive={!reduced}
+          onClick={(p) => { const h = (p as unknown as { payload?: NichePoint }).payload?.href; if (h) window.location.href = h; }} cursor="pointer" />
+        {mine.length > 0 && <Scatter name="Твои ролики" data={mine} fill={SERIES.short} stroke="var(--color-ink-2)" strokeWidth={1.5} shape="diamond" isAnimationActive={!reduced} />}
+      </ScatterChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Рост просмотров ролика по снимкам синхронизации. */
+export function ViewsHistoryChart({ data }: { data: { day: string; views: number }[] }) {
+  const reduced = useReducedMotion();
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+        <defs>
+          <linearGradient id="vh" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={SERIES.long} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={SERIES.long} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke="var(--color-line)" strokeOpacity={0.6} />
+        <XAxis dataKey="day" {...AXIS} tickFormatter={fmtDay} minTickGap={28} />
+        <YAxis {...AXIS} tickFormatter={compactNum} width={48} domain={["dataMin", "auto"]} />
+        <Tooltip content={<TooltipBox labelFmt={fmtDay} />} />
+        <Area type="monotone" dataKey="views" name="Просмотры" stroke={SERIES.long} strokeWidth={2} fill="url(#vh)" isAnimationActive={!reduced} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}

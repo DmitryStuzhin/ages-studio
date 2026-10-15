@@ -143,6 +143,25 @@ CREATE TABLE IF NOT EXISTS channel_reports (
   data JSONB NOT NULL,
   fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS yt_tags TEXT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS category_id TEXT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS language TEXT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS published_ts TIMESTAMPTZ;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS channel_videos INTEGER;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS channel_views BIGINT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS channel_thumb TEXT;
+CREATE TABLE IF NOT EXISTS market_comments (
+  id TEXT PRIMARY KEY,
+  video_id TEXT NOT NULL,
+  author TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  likes INTEGER NOT NULL DEFAULT 0,
+  replies INTEGER NOT NULL DEFAULT 0,
+  published_at TIMESTAMPTZ,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS market_comments_video ON market_comments(video_id);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL

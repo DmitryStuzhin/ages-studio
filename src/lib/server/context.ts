@@ -96,6 +96,18 @@ async function block(name: ContextBlock, project: Project, state: Awaited<Return
       ].join("\n");
     }
     case "market": {
+      const { nicheModel } = await import("./niche");
+      const { adviceText } = await import("@/lib/niche");
+      const nm = await nicheModel();
+      const fmt = (m: (typeof nm.similar)[number]) => `- ${m.title}${m.channel ? ` · ${m.channel}` : ""}${m.channelSubs != null ? ` (${m.channelSubs.toLocaleString("ru")} подп.)` : ""}${m.views != null ? ` · ${m.views.toLocaleString("ru")} просм.` : ""}${m.vpd ? ` · ${m.vpd.toLocaleString("ru")}/день` : ""}${m.outlier >= 1 ? ` · ×${m.outlier.toFixed(1)} к подписчикам` : ""}${m.durationSec ? ` · ${Math.round(m.durationSec / 60)} мин` : ""}${m.publishedAt ? ` · ${m.publishedAt}` : ""} · сходство ${m.sim}, сила ${m.power}`;
+      if (nm.similar.length) {
+        return [
+          `ПОХОЖИЕ НА РОЛИКИ КАНАЛА (${nm.similar.length}, по силе — во сколько раз обогнали свой канал):`,
+          ...nm.similar.slice(0, 30).map(fmt),
+          "",
+          adviceText(nm.advice),
+        ].join("\n");
+      }
       const all = (await marketItems()).filter((m) => !m.hidden);
       const items = [...all.filter((m) => m.pinned), ...all.filter((m) => !m.pinned && isHistoryRelevant(m))];
       if (!items.length) return "Сводка ниши пуста. Данные о спросе и конкурентах отсутствуют — не выдумывай их.";
