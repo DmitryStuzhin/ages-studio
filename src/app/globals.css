@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+/* Шрифт — Instrument Sans: заголовки 600, текст 400–500, прямые моноширинные цифры.
+   Палитра — пигменты древней живописи на чернильной ночи:
+   лазурит (основное действие), охра (внимание), малахит (пройдено), киноварь (провал).
+   Пергамент — только для текста сценариев и промптов: там, где автор читает. */
+@theme {
+  --color-ink: #0f1a21;
+  --color-ink-2: #15232c;
+  --color-ink-3: #1c2d38;
+  --color-line: #2a3d4a;
+  --color-line-2: #36505f;
+  --color-fog: #8ea3ae;
+  --color-mist: #c3d0d6;
+  --color-bone: #e8eef0;
+  --color-lapis: #5b8def;
+  --color-lapis-deep: #2f5bb8;
+  --color-ochre: #d9a441;
+  --color-malachite: #3fae7f;
+  --color-cinnabar: #e0584c;
+  --color-parchment: #ece4d1;
+  --color-parchment-ink: #2b241a;
+
+  --font-display: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+:root { color-scheme: dark; }
+
+html, body {
+  background: var(--color-ink);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: color-mix(in oklab, var(--color-lapis) 45%, transparent); }
+
+:focus-visible {
+  outline: 2px solid var(--color-lapis);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.015em; }
+/* Цифры везде прямые и одинаковой ширины — числа в таблицах и счётчиках не прыгают. */
+body { font-variant-numeric: lining-nums tabular-nums; }
+.font-display { font-weight: 600; letter-spacing: -0.02em; }
+
+@layer components {
+  .panel {
+    background: var(--color-ink-2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+  }
+  .field {
+    width: 100%;
+    background: var(--color-ink);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.7rem;
+    color: var(--color-bone);
+    font-size: 0.93rem;
+  }
+  .field:hover { border-color: var(--color-line-2); }
+  .field:focus { outline: none; border-color: var(--color-lapis); box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-lapis) 25%, transparent); }
+  .label { display: block; font-size: 0.8rem; color: var(--color-fog); margin-bottom: 0.3rem; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.5rem 0.95rem; border-radius: var(--radius-md);
+    font-size: 0.9rem; font-weight: 550; line-height: 1.2;
+    border: 1px solid var(--color-line-2); color: var(--color-bone); background: var(--color-ink-3);
+    transition: background-color .12s, border-color .12s, opacity .12s;
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--color-fog); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--color-lapis-deep); border-color: var(--color-lapis); color: #fff; }
+  .btn-primary:hover { background: var(--color-lapis); }
+  .btn-approve { background: color-mix(in oklab, var(--color-malachite) 30%, var(--color-ink-2)); border-color: var(--color-malachite); }
+  .btn-approve:hover { background: color-mix(in oklab, var(--color-malachite) 45%, var(--color-ink-2)); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--color-mist); }
+  .btn-ghost:hover { background: var(--color-ink-3); border-color: var(--color-line); }
+  .btn-danger { color: var(--color-cinnabar); }
+  .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.12rem 0.55rem; border-radius: 999px; font-size: 0.78rem;
+    border: 1px solid var(--color-line-2); color: var(--color-mist); background: var(--color-ink);
+  }
+
+  /* Пергамент: тексты сценариев и промптов */
+  .page {
+    background: var(--color-parchment);
+    color: var(--color-parchment-ink);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    line-height: 1.6;
+  }
+  .page::selection, .page *::selection { background: #c7b48a; }
+
+  .prose-ru p { margin: 0.4rem 0; }
+  .prose-ru ul { list-style: disc; padding-left: 1.2rem; }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .tbl th { text-align: left; color: var(--color-fog); font-weight: 500; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--color-line); }
+  .tbl td { padding: 0.5rem 0.6rem; border-bottom: 1px solid color-mix(in oklab, var(--color-line) 60%, transparent); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
