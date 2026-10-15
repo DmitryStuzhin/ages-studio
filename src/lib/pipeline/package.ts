@@ -57,7 +57,7 @@ export type ManifestScene = {
   act: string | null;
   threat: number | null;
   beat: string | null;
-  overlays: { clock: string | null; shield: string | null; accent: string | null; verdict: boolean };
+  overlays: { clock: string | null; shield: string | null; accent: string | null; accentText: string | null; place: string | null; hit: boolean; verdict: boolean; verdictText: string | null };
   music: string | null;
   edit: string | null;
   refs: string[];
@@ -107,7 +107,11 @@ export function buildManifest(args: {
         clock: edit.match(/⏱\s*([0-2]?\d[:.]\d{2})/)?.[1] ?? sf?.hour ?? null,
         shield: edit.match(/🛡\s*(\d+\s*\/\s*\d+)/)?.[1]?.replace(/\s/g, "") ?? sf?.markers.shield ?? null,
         accent: s.accent ?? sf?.markers.accent ?? null,
-        verdict: sf?.markers.verdict ?? false,
+        accentText: edit.match(/📌\s*(?:АКЦЕНТ:?\s*)?[A-ZА-ЯЁ]{3,}\s*:?\s*([^·]+)/)?.[1]?.trim() ?? null,
+        place: edit.match(/📍\s*([^·]+)/)?.[1]?.trim() ?? null,
+        hit: edit.includes("💥"),
+        verdict: sf?.markers.verdict ?? edit.includes("☠"),
+        verdictText: edit.match(/☠\s*([^·]+)/)?.[1]?.trim() ?? null,
       },
       music: edit.match(/🎵\s*([^·]+)/)?.[1]?.trim() ?? null,
       edit: edit || null,
@@ -237,4 +241,61 @@ export async function buildZip(m: Manifest, extras: { voiceText: string | null; 
   if (extras.frameCheck) zip.file("frames_check.json", JSON.stringify(extras.frameCheck, null, 2));
   zip.folder("frames")!.file("README.txt", "Положи сюда кадры shot_NNN.png и анимации shot_NNN.mp4 из Flow.\n");
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+}
+
+// ---------- Локальный конвейер (~/illustrated-ages-pipeline) ----------
+
+const csvCell = (v: string | number) => {
+  const t = String(v ?? "");
+  return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+/** storyboard.csv в формате конвейера: shot, scene, prompt, voice, anim, anim_prompt, refs, notes. */
+export function toStoryboardCsv(m: Manifest) {
+  const rows = [["shot", "scene", "prompt", "voice", "anim", "anim_prompt", "refs", "notes"]];
+  let lastAct: string | null = null;
+  for (const s of m.scenes) {
+    const notes: string[] = [];
+    const edit = (s.edit ?? "").split("·").map((x) => x.trim()).filter((x) => x && !x.startsWith("🎵"));
+    // ⏱ в начале каждого акта — даже если модель забыла его в поле «Монтаж»
+    if (s.act && s.act !== lastAct && s.overlays.clock && !edit.some((x) => x.startsWith("⏱"))) notes.push(`⏱ ${s.overlays.clock}`);
+    lastAct = s.act ?? lastAct;
+    notes.push(...edit);
+    rows.push([
+      String(Number(s.id)), s.act ?? "", s.imagePrompt, s.voice, s.animationPrompt ? "1" : "0",
+      s.animationPrompt ?? "", s.refs.join(","), notes.join(" · "),
+    ]);
+  }
+  return rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+/** Персонажи из ответа шага 5: блоки «ФАЙЛ / ИМЯ / ОПИСАНИЕ». */
+export function parseCast(text: string | null | undefined) {
+  if (!text) return [];
+  const out: { file: string; name: string; description: string }[] = [];
+  for (const block of text.split(/\n(?=\s*\**\s*ФАЙЛ:)/)) {
+    const get = (k: string) => block.match(new RegExp(`^\\s*\\**\\s*${k}:\\s*(.+)$`, "im"))?.[1]?.trim().replace(/\*+$/, "") ?? null;
+    const file = get("ФАЙЛ");
+    const description = get("ОПИСАНИЕ");
+    if (file && description) out.push({ file, name: get("ИМЯ") ?? file, description });
+  }
+  return out;
+}
+
+export function toStyleMd(args: { slug: string; styleLine: string; animTemplate: string; cast: ReturnType<typeof parseCast> }) {
+  return `# Style bible: ${args.slug}
+
+## Style line (appended verbatim to the end of every prompt)
+${args.styleLine}
+
+## Recurring characters (descriptions repeated verbatim in every prompt where they appear)
+${args.cast.length ? args.cast.map((c) => `- ${c.name} (${c.file}): ${c.description}`).join("\n") : "- (персонажи появятся после шага 5 в Ages Studio)"}
+
+## Rules
+- One clear scene per shot, no text anywhere in the image.
+- Violence only by hint: shadow, silhouette, consequence. No blood, no gore.
+
+## Animation prompt template
+${args.animTemplate}
+`;
 }

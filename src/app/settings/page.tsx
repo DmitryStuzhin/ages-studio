@@ -2,7 +2,8 @@ import { PageHeader, Section } from "@/components/ui";
 import { getSettings } from "@/lib/server/repo";
 import { integrations } from "@/lib/integrations/status";
 import { MODEL_PRICES, LONG_STEPS } from "@/lib/pipeline/steps";
-import { SettingsForm, GoogleConnect } from "./client";
+import { SettingsForm, GoogleConnect, CanonForm } from "./client";
+import { getCanon } from "@/lib/server/canon";
 import { oauthConfigured } from "@/lib/integrations/youtube";
 import { googleAuthState } from "@/lib/server/sync";
 import { SyncStatus } from "@/components/sync-status";
@@ -47,6 +48,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           ))}
         </ul>
       </Section>
+
+      <section id="canon" className="mb-6 scroll-mt-6">
+        <Section title="Канон канала">
+          <p className="mb-4 text-sm text-mist">Всё, что одинаково во всех роликах. Подставляется в шаги, гейты, пакет и экспорт в конвейер автоматически — в формах проекта этого больше нет.</p>
+          <CanonForm initial={await getCanon()} />
+        </Section>
+      </section>
 
       <Section title="YouTube" className="mb-6">
         {sp.google && GOOGLE_MSG[sp.google] && (

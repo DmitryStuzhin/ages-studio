@@ -5,9 +5,9 @@ import clsx from "clsx";
 import { VideoCard, OverlayChip } from "@/components/video-card";
 import { compact } from "@/lib/market";
 
-type V = { id: string; title: string; published: string | null; duration: string | null; views: number | null; likes: number | null; comments: number | null; project: number | null };
+type V = { id: string; title: string; published: string | null; duration: string | null; views: number | null; likes: number | null; comments: number | null; d1: number | null; d7: number | null; project: number | null };
 
-const SORTS = { date: "Сначала новые", views: "Больше просмотров" } as const;
+const SORTS = { date: "Сначала новые", views: "Больше просмотров", week: "Растут за неделю" } as const;
 
 /** Ролики канала карточками: вкладки «Ролики / Шортсы», сортировка, показ порциями. */
 export function ChannelVideos({ longs, shorts }: { longs: V[]; shorts: V[] }) {
@@ -15,7 +15,7 @@ export function ChannelVideos({ longs, shorts }: { longs: V[]; shorts: V[] }) {
   const [sort, setSort] = useState<keyof typeof SORTS>("date");
   const [limit, setLimit] = useState(12);
   const src = tab === "long" ? longs : shorts;
-  const list = [...src].sort((a, b) => (sort === "views" ? (b.views ?? 0) - (a.views ?? 0) : 0));
+  const list = [...src].sort((a, b) => (sort === "views" ? (b.views ?? 0) - (a.views ?? 0) : sort === "week" ? (b.d7 ?? -1) - (a.d7 ?? -1) : 0));
   const total = src.reduce((a, v) => a + (v.views ?? 0), 0);
   const step = tab === "long" ? 12 : 18;
 
@@ -49,6 +49,8 @@ export function ChannelVideos({ longs, shorts }: { longs: V[]; shorts: V[] }) {
             meta={v.published}
             stats={<>
               <span><span className="text-bone">{compact(v.views)}</span> просм.</span>
+              {v.d1 != null && v.d1 > 0 && <span className="text-malachite" title="Просмотров за последние сутки">+{compact(v.d1)} за сутки</span>}
+              {v.d1 == null && v.d7 != null && v.d7 > 0 && <span className="text-malachite" title="Просмотров за неделю">+{compact(v.d7)} за неделю</span>}
               {tab === "long" && <span>♥ {v.likes ?? "—"}</span>}
               {tab === "long" && <span>💬 {v.comments ?? "—"}</span>}
               {v.project && <Link href={`/projects/${v.project}`} className="text-lapis hover:underline">проект</Link>}

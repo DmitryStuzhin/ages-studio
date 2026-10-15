@@ -125,6 +125,24 @@ CREATE TABLE IF NOT EXISTS sync_runs (
   log JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 CREATE UNIQUE INDEX IF NOT EXISTS metrics_api_unique ON metrics(project_id, day) WHERE source = 'api';
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS channel_id TEXT;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS channel_subs INTEGER;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS duration_sec INTEGER;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS likes INTEGER;
+ALTER TABLE market_items ADD COLUMN IF NOT EXISTS comments INTEGER;
+CREATE TABLE IF NOT EXISTS video_history (
+  video_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  views INTEGER,
+  likes INTEGER,
+  comments INTEGER,
+  PRIMARY KEY (video_id, day)
+);
+CREATE TABLE IF NOT EXISTS channel_reports (
+  key TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL

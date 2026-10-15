@@ -67,7 +67,7 @@ function properNames(text: string) {
 }
 
 function words(s: string) {
-  return s.toLowerCase().replace(/[^\p{L}\p{N}'\s]/gu, " ").split(/\s+/).filter(Boolean);
+  return s.replace(/\[[^\]]*\]/g, " ").toLowerCase().replace(/[^\p{L}\p{N}'\s]/gu, " ").split(/\s+/).filter(Boolean);
 }
 function ngrams(ws: string[], n: number) {
   const out = new Set<string>();
@@ -288,7 +288,7 @@ export function framesGates(input: GateInput, vertical = false): GateResult[] {
   } else out.push(warn("style", "БЛОК СТИЛЯ дословно", "Блок стиля не задан в параметрах — проверка пропущена."));
 
   const anim = fr.filter((f) => f.animation);
-  const loud = anim.filter((f) => !/Silent/i.test(f.animation!));
+  const loud = anim.filter((f) => !/silent|no (?:added )?(?:text or )?sound|no audio/i.test(f.animation!));
   out.push(loud.length ? fail("silent", "Анимации беззвучные", loud.map((f) => f.id).join(", ")) : pass("silent", "Анимации беззвучные", `${anim.length} анимаций`));
   if (!vertical) {
     const share = anim.length / fr.length;

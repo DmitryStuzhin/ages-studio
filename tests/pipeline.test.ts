@@ -76,3 +76,40 @@ test("манифест, SRT и FCPXML собираются из кадров", (
   assert.match(toSrt(m), /00:00:00,000 -->/);
   assert.match(toFcpxml(m), /T &amp; &lt;x&gt;/);
 });
+
+import { toStoryboardCsv, parseCast } from "../src/lib/pipeline/package";
+import { countWords as cw } from "../src/lib/pipeline/parse";
+import { dailySeries, forecast } from "../src/lib/stats";
+
+test("теги Eleven v3 не считаются словами", () => {
+  assert.equal(cw("[tense] The rope... snaps. [short pause] Run."), 4);
+});
+
+test("storyboard.csv в формате конвейера, ⏱ в начале акта, кавычки экранированы", () => {
+  const script = parseScript(frame(1, "You wake up, and \"nobody\" is coming.", " · угроза 1"), 155);
+  const m = buildManifest({ projectId: 1, title: "T", kind: "long", role: null, script, framesText: "Кадр 001\nОзвучка: You wake up, and \"nobody\" is coming.\nПромпт: A scene, style\nМонтаж: 📍 Giza · 💥\n", wpm: 155 });
+  const csv = toStoryboardCsv(m);
+  const [head, row] = csv.trim().split("\n");
+  assert.equal(head, "shot,scene,prompt,voice,anim,anim_prompt,refs,notes");
+  assert.match(row, /^1,Act 1 - Test,"A scene, style","You wake up, and ""nobody"" is coming\.",0,,,⏱ 05:00 · 📍 Giza · 💥$/);
+  assert.equal(m.scenes[0].overlays.place, "Giza");
+  assert.equal(m.scenes[0].overlays.hit, true);
+});
+
+test("персонажи шага 5 разбираются для style.md", () => {
+  const c = parseCast("ФАЙЛ: char_you.png\nИМЯ: the boy\nОПИСАНИЕ: A thin boy in soot.\nРЕФЕРЕНС-ЛИСТ: sheet\n\nФАЙЛ: loc_roof.png\nОПИСАНИЕ: A slate roof.");
+  assert.deepEqual(c.map((x) => x.file), ["char_you.png", "loc_roof.png"]);
+  assert.equal(c[0].name, "the boy");
+});
+
+test("прогноз: при нулевом темпе цели нет, при достаточном — успеваем", () => {
+  const rows = Array.from({ length: 30 }, (_, i) => ({ day: `2026-09-${String(i + 1).padStart(2, "0")}`, creatorContentType: "videoOnDemand", views: 10, estimatedMinutesWatched: 600, subscribersGained: 1, subscribersLost: 0 }));
+  const pts = dailySeries(rows);
+  assert.equal(pts.length, 30);
+  const f = forecast({ points: pts, pick: (p) => p.longHours, now: 300, goal: 400, deadline: "2099-01-01" });
+  assert.equal(f.pacePerDay, 10);
+  assert.equal(f.daysToGoal, 10);
+  assert.equal(f.onTrack, true);
+  const z = forecast({ points: pts, pick: () => 0, now: 0, goal: 400, deadline: "2099-01-01" });
+  assert.equal(z.eta, null);
+});

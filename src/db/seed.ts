@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { CONSTITUTION_V8, STEP_PROMPTS_V8, V8_CHANGELOG } from "@/lib/prompts/v8";
+import { CONSTITUTION_V8_1, STEP_PROMPTS_V8_1, V8_1_CHANGELOG } from "@/lib/prompts/v8_1";
 import type { DB } from "./client";
 
 export const DEFAULT_SETTINGS = {
@@ -49,9 +50,36 @@ export const DEFAULT_SETTINGS = {
 
 export type AppSettings = typeof DEFAULT_SETTINGS;
 
+/** Миграции данных: выполняются один раз, отметка хранится в settings.migrations. */
+async function migrate(db: DB) {
+  const row = await db.query.settings.findFirst({ where: eq(schema.settings.key, "migrations") });
+  const done = new Set((row?.value as string[] | undefined) ?? []);
+  const mark = async (id: string) => {
+    done.add(id);
+    await db.insert(schema.settings).values({ key: "migrations", value: [...done] })
+      .onConflictDoUpdate({ target: schema.settings.key, set: { value: [...done] } });
+  };
+
+  if (!done.has("prompt-v9-canon")) {
+    // v9 = v8 + канон канала. Активируется сам, только если автор ещё не правил промпт (активна исходная v8);
+    // иначе ложится в историю, а в «Правки мастер-промпта» уходит напоминание.
+    const active = await db.query.promptVersions.findFirst({ where: eq(schema.promptVersions.status, "active") });
+    const untouched = !active || (active.version === "v8" && active.constitution === CONSTITUTION_V8);
+    if (untouched) await db.update(schema.promptVersions).set({ status: "archived" }).where(eq(schema.promptVersions.status, "active"));
+    await db.insert(schema.promptVersions).values({
+      version: "v9", constitution: CONSTITUTION_V8_1, steps: STEP_PROMPTS_V8_1, changelog: V8_1_CHANGELOG,
+      status: untouched ? "active" : "archived",
+    });
+    if (!untouched) {
+      await db.insert(schema.promptProposals).values({ text: "Есть версия v9 с каноном канала (стиль, анимация, Eleven v3, метки монтажа подставляются сами). Активируй её в «Истории версий» и перенеси свои правки." });
+    }
+    await mark("prompt-v9-canon");
+  }
+}
+
 export async function seed(db: DB) {
   const [{ n }] = (await db.execute(sql`select count(*)::int as n from prompt_versions`)).rows as { n: number }[];
-  if (n > 0) return;
+  if (n > 0) return migrate(db);
 
   await db.insert(schema.promptVersions).values({
     version: "v8",
@@ -127,4 +155,5 @@ export async function seed(db: DB) {
     { text: "Шортс с таймером держит 77% длины, но «продолжили смотреть» только 32% — первый кадр перегружен.", evidence: "Данные 12.10.2026.", confirmations: 1, status: "hypothesis", scope: "short" },
     { text: "Звук клипов Veo глушить — в ролике только озвучка и музыка.", evidence: "Spanish Flu.", confirmations: 1, status: "hypothesis", scope: "both", sourceProjectId: id("Spanish") },
   ]);
+  await migrate(db);
 }

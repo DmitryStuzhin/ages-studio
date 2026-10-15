@@ -3,6 +3,8 @@ import { structureByKey, hookByKey, ROTATION_WINDOW, STRUCTURES, HOOK_TYPES } fr
 import { stepDef, type ContextBlock, type ProjectKind } from "@/lib/pipeline/steps";
 import { isolateFinalScript, fmtTime } from "@/lib/pipeline/parse";
 import { isHistoryRelevant } from "@/lib/market";
+import { effectiveStyle } from "@/lib/canon";
+import { getCanon } from "./canon";
 import {
   activeLessons, activePrompt, getProject, getSettings, listProjects, marketItems, metricsFor,
   pastScripts, recentDramaturgy, snapshots, stepState,
@@ -23,6 +25,7 @@ export function finalScriptText(state: Awaited<ReturnType<typeof stepState>>) {
 async function block(name: ContextBlock, project: Project, state: Awaited<ReturnType<typeof stepState>>): Promise<string | null> {
   const p = project.params;
   const settings = await getSettings();
+  const canon = await getCanon();
   switch (name) {
     case "params": {
       const s = structureByKey(p.structureKey);
@@ -41,7 +44,11 @@ async function block(name: ContextBlock, project: Project, state: Awaited<Return
         p.threat && `Угроза шортса: ${p.threat}`,
         p.frameRange && `Диапазон кадров для этого вызова: ${p.frameRange}`,
         p.notes && `Заметки автора: ${p.notes}`,
-        `БЛОК СТИЛЯ: ${p.styleBlock || settings.defaults.styleBlock || "не задан — попроси автора вписать его в параметры"}`,
+        `СТРОКА СТИЛЯ (дописывается дословно в конец каждого промпта картинки): ${effectiveStyle(canon, p, project.kind === "short")}`,
+        `ШАБЛОН АНИМАЦИИ Veo: ${canon.animTemplate}`,
+        `ПРАВИЛО ПЕРСОНАЖЕЙ: ${canon.characterRule}`,
+        `ОЗВУЧКА: ${canon.voiceRules}`,
+        `МЕТКИ МОНТАЖА: ${canon.notesSyntax}`,
       ].filter(Boolean);
       return lines.join("\n");
     }
@@ -125,7 +132,7 @@ async function block(name: ContextBlock, project: Project, state: Awaited<Return
         `ЖУРНАЛ УГРОЗ И КАРТА:\n${approvedText(ps, "threats") ?? "нет"}`,
         `ПЕРСОНАЖИ:\n${approvedText(ps, "cast") ?? "нет"}`,
         `ФИНАЛЬНЫЙ СЦЕНАРИЙ:\n${finalScriptText(ps) ?? "нет"}`,
-        `БЛОК СТИЛЯ: ${parent.params.styleBlock ?? "не задан"}`,
+        `СТРОКА СТИЛЯ ШОРТСА: ${effectiveStyle(canon, parent.params, true)}`,
       ].join("\n\n");
     }
   }

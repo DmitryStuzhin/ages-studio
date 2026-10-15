@@ -92,6 +92,19 @@ export class YouTubeData {
     };
   }
 
+  /** Статистика нескольких каналов за 1 единицу квоты на 50 каналов. */
+  async channelsStats(ids: string[]) {
+    const out = new Map<string, { subscribers: number | null; views: number | null; videos: number | null; title: string }>();
+    for (let i = 0; i < ids.length; i += 50) {
+      this.units += 1;
+      const r = await getJson<{ items?: { id: string; snippet: { title: string }; statistics: { subscriberCount?: string; viewCount?: string; videoCount?: string } }[] }>(
+        this.url("channels", { part: "snippet,statistics", id: ids.slice(i, i + 50).join(",") }),
+      );
+      for (const c of r.items ?? []) out.set(c.id, { title: c.snippet.title, subscribers: n(c.statistics.subscriberCount), views: n(c.statistics.viewCount), videos: n(c.statistics.videoCount) });
+    }
+    return out;
+  }
+
   async playlistVideoIds(playlistId: string, max = 200) {
     const ids: string[] = [];
     let pageToken: string | undefined;

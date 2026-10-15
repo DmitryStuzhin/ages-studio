@@ -12,7 +12,8 @@ export function ParamsForm(props: {
   projectId: number;
   kind: "long" | "short";
   params: ProjectParams;
-  defaults: { durationMin: number; language: string; styleBlock: string };
+  defaults: { durationMin: number; language: string };
+  canon: { styleLine: string; styleLineVertical: string; animTemplate: string; importedFrom: string | null };
   structures: (Opt & { idea: string; fits: string })[];
   hooks: (Opt & { how: string })[];
   recent: { id: number; title: string; structure?: string; hook?: string }[];
@@ -21,14 +22,14 @@ export function ParamsForm(props: {
 }) {
   const { pending, run } = useAction();
   const [p, setP] = useState<ProjectParams>({
-    durationMin: props.defaults.durationMin, language: props.defaults.language, styleBlock: props.defaults.styleBlock, ...props.params,
+    durationMin: props.defaults.durationMin, language: props.defaults.language, ...props.params,
   });
   const set = (k: keyof ProjectParams) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setP((x) => ({ ...x, [k]: e.target.type === "number" ? Number(e.target.value) : e.target.value }));
 
   const firstFree = (list: Opt[]) => list.find((o) => !o.recent)?.key;
   const missing = props.kind === "long"
-    ? [!p.role && "роль", !p.structureKey && "структура", !p.hookTypeKey && "тип хука", !p.styleBlock?.trim() && "блок стиля"].filter(Boolean)
+    ? [!p.role && "роль", !p.structureKey && "структура", !p.hookTypeKey && "тип хука", p.styleOverride && !p.styleBlock?.trim() && "своя строка стиля"].filter(Boolean)
     : [!p.parentId && "родительский ролик"].filter(Boolean);
 
   const save = (approve: boolean) => run(() => saveParamsAction(props.projectId, p, approve));
@@ -128,8 +129,23 @@ export function ParamsForm(props: {
       </section>
 
       <section className="panel p-5">
-        <label className="label" htmlFor="style">Блок стиля — вставляется во все промпты картинок дословно</label>
-        <textarea id="style" className="field min-h-28 font-mono text-[0.84rem]" value={p.styleBlock ?? ""} onChange={set("styleBlock")} placeholder="Вставь свой БЛОК СТИЛЯ. Значение по умолчанию задаётся в Настройках." />
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-bone">Стиль, анимация, озвучка, метки монтажа</span>
+          <a href="/settings#canon" className="text-sm text-lapis hover:underline">канон канала</a>
+        </div>
+        <p className="mb-3 text-[0.82rem] text-fog">
+          Подставляются в каждый шаг автоматически из канона канала{props.canon.importedFrom ? ` (${props.canon.importedFrom})` : ""}. Вписывать ничего не нужно.
+        </p>
+        {!p.styleOverride ? (
+          <div className="page px-4 py-3 text-[0.8rem]">{props.canon.styleLine}</div>
+        ) : (
+          <textarea id="style" className="field min-h-24 font-mono text-[0.84rem]" value={p.styleBlock ?? props.canon.styleLine} onChange={set("styleBlock")} aria-label="Своя строка стиля для этого ролика" />
+        )}
+        <label className="mt-3 flex gap-2 text-sm text-mist">
+          <input type="checkbox" className="mt-1 accent-[var(--color-lapis)]" checked={Boolean(p.styleOverride)}
+            onChange={(e) => setP((x) => ({ ...x, styleOverride: e.target.checked, styleBlock: e.target.checked ? x.styleBlock || props.canon.styleLine : undefined }))} />
+          Другой стиль только для этого ролика
+        </label>
         <label className="label mt-4" htmlFor="notes">Заметки для модели</label>
         <textarea id="notes" className="field min-h-20" value={p.notes ?? ""} onChange={set("notes")} placeholder="Что важно учесть в этом ролике" />
         <label className="label mt-4" htmlFor="range">Диапазон кадров для шага 8 (если выдаёшь пачками)</label>

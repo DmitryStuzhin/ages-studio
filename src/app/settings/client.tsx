@@ -1,9 +1,11 @@
 "use client";
+import clsx from "clsx";
 import { useState } from "react";
 import type { AppSettings } from "@/db/seed";
 import { Section } from "@/components/ui";
 import { useAction } from "@/components/use-action";
-import { disconnectGoogleAction, saveSettingsAction } from "@/app/actions";
+import { disconnectGoogleAction, saveSettingsAction, saveCanonAction, importCanonAction } from "@/app/actions";
+import type { Canon } from "@/lib/canon";
 
 export function SettingsForm({ initial }: { initial: AppSettings }) {
   const { pending, run } = useAction();
@@ -24,10 +26,6 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
           <div><label className="label" htmlFor="dur">Длительность, мин</label><input id="dur" type="number" className="field" value={s.defaults.durationMin} onChange={(e) => upd("defaults", { durationMin: Number(e.target.value) })} /></div>
           <div><label className="label" htmlFor="wpm">Темп озвучки, слов/мин</label><input id="wpm" type="number" className="field" value={s.defaults.wordsPerMinute} onChange={(e) => upd("defaults", { wordsPerMinute: Number(e.target.value) })} /></div>
           <div><label className="label" htmlFor="lang">Язык озвучки</label><input id="lang" className="field" value={s.defaults.language} onChange={(e) => upd("defaults", { language: e.target.value })} /></div>
-          <div className="sm:col-span-3">
-            <label className="label" htmlFor="style">Блок стиля</label>
-            <textarea id="style" className="field min-h-28 font-mono text-[0.84rem]" value={s.defaults.styleBlock} onChange={(e) => upd("defaults", { styleBlock: e.target.value })} placeholder="Твой БЛОК СТИЛЯ из мастер-промпта — он вставляется во все промпты картинок дословно и проверяется гейтом." />
-          </div>
         </div>
       </Section>
 
@@ -117,6 +115,46 @@ export function GoogleConnect({ configured, channel, since, state, hoursLeft }: 
     <div className="flex flex-wrap items-center gap-3">
       <a href="/api/auth/google/start" className="btn btn-primary">Войти через Google</a>
       <span className="text-sm text-fog">Входи в аккаунт, которому принадлежит канал. Предупреждение «приложение не проверено» — нормально: «Дополнительно» → «Перейти».</span>
+    </div>
+  );
+}
+
+const CANON_FIELDS: { key: keyof Canon; label: string; hint: string; rows: number; mono?: boolean }[] = [
+  { key: "styleLine", label: "Строка стиля", hint: "Дописывается дословно в конец каждого промпта картинки. Уже содержит 16:9 и запрет текста.", rows: 3, mono: true },
+  { key: "styleLineVertical", label: "Строка стиля шортсов (9:16)", hint: "То же для вертикальных кадров.", rows: 3, mono: true },
+  { key: "animTemplate", label: "Шаблон анимации Veo", hint: "<MOTION> заменяется конкретным движением кадра.", rows: 3, mono: true },
+  { key: "characterRule", label: "Правило персонажей", hint: "Как описания из шага 5 вписываются в промпт.", rows: 3 },
+  { key: "voiceRules", label: "Озвучка Eleven v3", hint: "Теги, пунктуация, числа словами.", rows: 5 },
+  { key: "notesSyntax", label: "Метки монтажа", hint: "Их читает tools/montage.py конвейера.", rows: 8, mono: true },
+];
+
+export function CanonForm({ initial }: { initial: Canon }) {
+  const { pending, run } = useAction();
+  const [c, setC] = useState<Canon>(initial);
+  const dirty = JSON.stringify(c) !== JSON.stringify(initial);
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn btn-primary" disabled={pending} onClick={() => run(() => importCanonAction())}>Подтянуть из конвейера</button>
+        <span className="text-sm text-fog">
+          {initial.source.importedFrom ? <>Последний импорт: {initial.source.importedFrom}{initial.source.importedAt && `, ${new Date(initial.source.importedAt).toLocaleString("ru-RU")}`}</> : "Значения по умолчанию взяты из style.md и CLAUDE.md конвейера."}
+        </span>
+      </div>
+      <div>
+        <label className="label" htmlFor="c-dir">Папка конвейера на Mac</label>
+        <input id="c-dir" className="field font-mono text-[0.84rem]" value={c.pipelineDir} onChange={(e) => setC({ ...c, pipelineDir: e.target.value })} />
+      </div>
+      {CANON_FIELDS.map((f) => (
+        <div key={f.key}>
+          <label className="label" htmlFor={`c-${f.key}`}>{f.label} <span className="text-fog/80">— {f.hint}</span></label>
+          <textarea id={`c-${f.key}`} rows={f.rows} className={clsx("field", f.mono && "font-mono text-[0.82rem]")} value={String(c[f.key] ?? "")}
+            onChange={(e) => setC({ ...c, [f.key]: e.target.value })} />
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <button className="btn btn-approve" disabled={!dirty || pending} onClick={() => run(() => saveCanonAction(c))}>Сохранить канон</button>
+        {dirty && <button className="btn btn-ghost" onClick={() => setC(initial)}>Сбросить</button>}
+      </div>
     </div>
   );
 }

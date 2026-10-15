@@ -21,6 +21,8 @@ const FILES = [
 export function ExportStep(props: {
   projectId: number; ready: boolean; scenes: number; duration: number; animated: number;
   hasVoiceText: boolean; hasPackaging: boolean; status: string; youtubeUrl: string | null; aspect: string;
+  /** Ролик уже в локальном конвейере: кадры сверяются по папке автоматически, выбирать её не нужно. */
+  pipelineManaged?: boolean;
 }) {
   const toast = useToast();
   const { pending, run } = useAction();
@@ -83,7 +85,7 @@ export function ExportStep(props: {
         )}
       </section>
 
-      <section className="panel p-5">
+      {!props.pipelineManaged && <section className="panel p-5">
         <h3 className="text-[1.25rem]">Кадры из Flow</h3>
         <p className="mt-1 text-sm text-fog">Выбери папку с кадрами — в браузере читаются только имена файлов, сами картинки никуда не загружаются. Платформа сверит их со сценарием: shot_NNN.png для каждого кадра и shot_NNN.mp4 для анимаций.</p>
         <input ref={input} type="file" className="hidden" multiple onChange={(e) => pick(e.target.files)} {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} />
@@ -100,7 +102,7 @@ export function ExportStep(props: {
             {check.extra.length > 0 && <Row label="Лишние" items={check.extra} />}
           </div>
         )}
-      </section>
+      </section>}
 
       <section className="panel p-5">
         <h3 className="text-[1.25rem]">Пакет видео</h3>

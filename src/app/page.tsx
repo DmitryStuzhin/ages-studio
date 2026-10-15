@@ -5,6 +5,8 @@ import { getSettings, listProjects, snapshots, stepState, currentStepKey, recent
 import { stepDef, type ProjectKind } from "@/lib/pipeline/steps";
 import { STRUCTURES, HOOK_TYPES } from "@/lib/prompts/library";
 import { integrations } from "@/lib/integrations/status";
+import { analyticsModel } from "@/lib/server/analytics";
+import { CountUp, DailyViewsChart } from "@/components/charts";
 import { SyncStatus } from "@/components/sync-status";
 import { getDb, schema } from "@/db/client";
 import { eq } from "drizzle-orm";
@@ -15,12 +17,24 @@ function daysBetween(a: Date, b: Date) {
   return Math.ceil((b.getTime() - a.getTime()) / 86400000);
 }
 
+function ForecastLine({ f, unit }: { f: { pacePerDay: number; neededPerDay: number; eta: string | null; onTrack: boolean }; unit: string }) {
+  const fmt = (v: number) => (v < 10 ? v.toFixed(1).replace(".", ",") : Math.round(v).toLocaleString("ru"));
+  return (
+    <p className="mt-5 text-[0.8rem]">
+      <span className={f.onTrack ? "text-malachite" : "text-ochre"}>{f.onTrack ? "Успеваем" : "Не успеваем"}</span>
+      <span className="text-fog"> · темп {fmt(f.pacePerDay)} {unit}, нужно {fmt(f.neededPerDay)} · {f.eta ? `цель ≈ ${fmtDate(f.eta)}` : "при таком темпе цель не наступит"} · </span>
+      <Link href="/analytics" className="text-lapis hover:underline">прогноз</Link>
+    </p>
+  );
+}
+
 export default async function Dashboard() {
   const [settings, projects, snaps, rec, prompt] = await Promise.all([getSettings(), listProjects(), snapshots(), recentDramaturgy(), activePrompt()]);
   const db = await getDb();
   const proposedLessons = await db.select().from(schema.lessons).where(eq(schema.lessons.status, "proposed"));
   const proposals = await db.select().from(schema.promptProposals).where(eq(schema.promptProposals.status, "pending"));
   const snap = snaps.at(-1);
+  const am = await analyticsModel();
   const goal = settings.goal;
   const today = new Date();
   const deadline = new Date(goal.deadline);
@@ -44,7 +58,7 @@ export default async function Dashboard() {
         <Link href="/projects?new=short" className="btn"><Film size={16} />Новый шортс</Link>
       </PageHeader>
 
-      <section className="panel mb-6 overflow-hidden">
+      <section className="reveal panel mb-6 overflow-hidden">
         <div className="grid gap-6 p-6 md:grid-cols-[240px_1fr]">
           <div>
             <div className="text-sm text-fog">До подачи заявки в YPP</div>
@@ -56,16 +70,18 @@ export default async function Dashboard() {
             <div>
               <div className="mb-1 flex items-baseline justify-between">
                 <span className="text-mist">Подписчики</span>
-                <span className="font-display text-2xl">{snap?.subscribers ?? "—"} <span className="text-base text-fog">/ {goal.subscribers}</span></span>
+                <span className="font-display text-2xl">{snap ? <CountUp value={snap.subscribers} /> : "—"} <span className="text-base text-fog">/ {goal.subscribers}</span></span>
               </div>
               <HourRuler value={snap?.subscribers ?? 0} max={goal.subscribers} marks={goal.checkpoints.map((c) => ({ at: c.subscribers, label: fmtDate(c.date).replace(/ \d{4}.*/, "") }))} />
+              {am.subsForecast && <ForecastLine f={am.subsForecast} unit="подп./день" />}
             </div>
             <div>
               <div className="mb-1 flex items-baseline justify-between">
                 <span className="text-mist">Часы просмотра за 12 мес.</span>
-                <span className="font-display text-2xl">{snap?.watchHours12m ?? "—"} <span className="text-base text-fog">/ {goal.watchHours}</span></span>
+                <span className="font-display text-2xl">{snap?.watchHours12m != null ? <CountUp value={snap.watchHours12m} decimals={snap.watchHours12m < 100 ? 1 : 0} /> : "—"} <span className="text-base text-fog">/ {goal.watchHours}</span></span>
               </div>
               <HourRuler value={snap?.watchHours12m ?? 0} max={goal.watchHours} marks={goal.checkpoints.map((c) => ({ at: c.watchHours, label: fmtDate(c.date).replace(/ \d{4}.*/, "") }))} />
+              {am.hoursForecast && <ForecastLine f={am.hoursForecast} unit="ч/день" />}
             </div>
             <div className="text-[0.85rem] text-fog">
               {snap ? <>Последний снимок канала — {fmtDate(snap.day)} </> : <>Снимков канала ещё нет — внеси цифры из YouTube Studio в <Link className="text-lapis underline-offset-2 hover:underline" href="/analytics">Аналитике</Link>. </>}
@@ -75,16 +91,26 @@ export default async function Dashboard() {
         </div>
       </section>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Section title="В работе" aside={<Link href="/projects" className="text-sm text-lapis hover:underline">все</Link>}>
+      {am.hasReports && (
+        <section className="reveal panel mb-6 p-5" style={{ ["--i" as string]: 1 }}>
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[1.2rem]">Последние 28 дней</h2>
+            <Link href="/analytics" className="text-sm text-lapis hover:underline">вся аналитика</Link>
+          </div>
+          <DailyViewsChart data={am.points.slice(-28)} />
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <Section className="min-w-0" title="В работе" aside={<Link href="/projects" className="text-sm text-lapis hover:underline">все</Link>}>
           {activeWithStep.length === 0 ? (
             <Empty title="Нет роликов в работе">Начни новый ролик: платформа сама подставит уроки, сводку ниши и свободную структуру.</Empty>
           ) : (
             <ul className="divide-y divide-line/70">
               {activeWithStep.map(({ p, step }) => (
                 <li key={p.id}>
-                  <Link href={`/projects/${p.id}`} className="-mx-2 flex items-center gap-3 rounded-md px-2 py-3 hover:bg-ink-3/60">
-                    <div className="min-w-0 flex-1">
+                  <Link href={`/projects/${p.id}`} className="-mx-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md px-2 py-3 hover:bg-ink-3/60">
+                    <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
                       <div className="truncate text-bone">{p.title}</div>
                       <div className="mt-0.5 text-[0.82rem] text-fog">Шаг {step?.label}: {step?.title}</div>
                     </div>

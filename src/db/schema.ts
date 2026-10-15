@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, jsonb, real, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, jsonb, real, date, primaryKey } from "drizzle-orm/pg-core";
 
 export const promptVersions = pgTable("prompt_versions", {
   id: serial("id").primaryKey(),
@@ -40,6 +40,10 @@ export type ProjectParams = {
   structureKey?: string;
   hookTypeKey?: string;
   styleBlock?: string;
+  /** true — строка стиля этого ролика отличается от канона. */
+  styleOverride?: boolean;
+  /** Папка ролика в локальном конвейере: videos/<slug>. */
+  pipelineSlug?: string;
   nextRole?: string;
   answerWord?: string;
   chosenHook?: string;
@@ -134,6 +138,12 @@ export const marketItems = pgTable("market_items", {
   tags: text("tags").notNull().default(""),
   source: text("source").$type<"manual" | "api">().notNull().default("manual"),
   externalId: text("external_id"),
+  channelId: text("channel_id"),
+  /** Подписчики канала-автора: views / channelSubs — насколько ролик «выстрелил» относительно канала. */
+  channelSubs: integer("channel_subs"),
+  durationSec: integer("duration_sec"),
+  likes: integer("likes"),
+  comments: integer("comments"),
   /** Скрыт автором как нерелевантный: не показывается и не уходит в промпты, при синхронизации не возвращается. */
   hidden: boolean("hidden").notNull().default(false),
   /** Отмечен автором как важный референс: всегда попадает в промпты первым. */
@@ -152,6 +162,20 @@ export const channelVideos = pgTable("channel_videos", {
   comments: integer("comments"),
   isShort: boolean("is_short").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const videoHistory = pgTable("video_history", {
+  videoId: text("video_id").notNull(),
+  day: date("day").notNull(),
+  views: integer("views"),
+  likes: integer("likes"),
+  comments: integer("comments"),
+}, (t) => [primaryKey({ columns: [t.videoId, t.day] })]);
+
+export const channelReports = pgTable("channel_reports", {
+  key: text("key").primaryKey(),
+  data: jsonb("data").notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type SyncLogLine = { level: "ok" | "warn" | "error"; text: string };

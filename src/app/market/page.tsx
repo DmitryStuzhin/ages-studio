@@ -43,10 +43,14 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
     list = list.filter((m) => `${m.title} ${m.channel ?? ""} ${m.angle}`.toLowerCase().includes(q));
   }
   const speed = (m: (typeof list)[number]) => viewsPerDay(m.views, m.publishedAt ? String(m.publishedAt) : null) ?? 0;
+  // Outlier: во сколько раз просмотры ролика больше подписчиков его канала — так находят темы,
+  // которые выстрелили не за счёт размера канала (тот же принцип, что «outlier score» у vidIQ).
+  const outlier = (m: (typeof list)[number]) => (m.views && m.channelSubs ? m.views / Math.max(m.channelSubs, 100) : 0);
   list.sort((a, b) =>
     sort === "date" ? String(b.publishedAt ?? "").localeCompare(String(a.publishedAt ?? ""))
       : sort === "views" ? (b.views ?? 0) - (a.views ?? 0)
-        : speed(b) - speed(a));
+        : sort === "outlier" ? outlier(b) - outlier(a)
+          : speed(b) - speed(a));
   list.sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   // «Взлёт» — ролик набирает в день втрое больше медианы по сводке: сигнал, что тема сейчас растёт.
@@ -75,7 +79,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             { key: "hidden", label: "Скрытые", count: counts.hidden },
           ]}
           sources={sources as string[]}
-          sorts={[{ key: "speed", label: "Просмотры в день" }, { key: "views", label: "Всего просмотров" }, { key: "date", label: "Сначала новые" }]}
+          sorts={[{ key: "speed", label: "Просмотры в день" }, { key: "outlier", label: "Выстрелили сильнее канала" }, { key: "views", label: "Всего просмотров" }, { key: "date", label: "Сначала новые" }]}
           total={list.length}
         />
         {shown.length === 0 ? (
@@ -95,9 +99,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                   badge={<>
                     {m.pinned && <OverlayChip tone="ochre">закреплён</OverlayChip>}
                     {hot(vpd) && <OverlayChip tone="lapis">взлёт</OverlayChip>}
+                    {outlier(m) >= 3 && <OverlayChip>×{outlier(m) >= 10 ? Math.round(outlier(m)) : outlier(m).toFixed(1).replace(".", ",")} к подписчикам</OverlayChip>}
                   </>}
                   actions={<CardActions id={m.id} pinned={m.pinned} hidden={m.hidden} manual={m.source !== "api"} />}
-                  meta={<>{m.channel ?? "—"}{m.publishedAt ? ` · ${fmtDate(String(m.publishedAt))}` : ""}</>}
+                  meta={<>{m.channel ?? "—"}{m.channelSubs != null ? ` · ${compact(m.channelSubs)} подп.` : ""}{m.publishedAt ? ` · ${fmtDate(String(m.publishedAt))}` : ""}</>}
                   stats={<>
                     <span title="Всего просмотров"><span className="text-bone">{compact(m.views)}</span> просм.</span>
                     {vpd > 0 && <span title="Средние просмотры в день с момента выхода">{compact(vpd)}/день</span>}

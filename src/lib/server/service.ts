@@ -10,6 +10,8 @@ import { structureByKey } from "@/lib/prompts/library";
 import { anthropicConfigured, anthropicGenerate } from "@/lib/integrations/anthropic";
 import { mockFrames, mockOutput } from "@/lib/integrations/mock";
 import { buildPrompt, finalScriptText } from "./context";
+import { getCanon } from "./canon";
+import { effectiveStyle } from "@/lib/canon";
 import { activePrompt, getProject, getSettings, pastScripts, recentDramaturgy, stepState } from "./repo";
 
 type Project = NonNullable<Awaited<ReturnType<typeof getProject>>>;
@@ -33,7 +35,7 @@ async function scriptFor(project: Project) {
 export async function computeGates(project: Project, stepKey: string, output: string): Promise<GateResult[]> {
   const def = stepDef(project.kind as ProjectKind, stepKey);
   if (!def?.gates) return [];
-  const settings = await getSettings();
+  const canon = await getCanon();
   const rec = await recentDramaturgy(project.id);
   const { parsed, wpm } = await scriptFor(project);
   let params = project.params;
@@ -48,7 +50,7 @@ export async function computeGates(project: Project, stepKey: string, output: st
     wpm,
     pastScripts: def.gates === "script" || def.gates === "angle" ? await pastScripts(project.id) : [],
     approvedScript: def.gates === "frames" || def.gates === "short_script" ? parsed : null,
-    styleBlock: params.styleBlock || settings.defaults.styleBlock,
+    styleBlock: effectiveStyle(canon, params, project.kind === "short"),
     recentHookTypes: rec.hookTypes,
     recentStructures: rec.structures,
   });
@@ -95,7 +97,8 @@ export async function generate(projectId: number, stepKey: string, mode: "api" |
     const parent = await getProject(params.parentId);
     params = { ...parent?.params, ...params };
   }
-  const out = stepKey === "frames" && parsed ? mockFrames(parsed, params) : mockOutput(stepKey, params, { script: text, wpm });
+  const canon = await getCanon();
+  const out = stepKey === "frames" && parsed ? mockFrames(parsed, params, false, effectiveStyle(canon, params)) : mockOutput(stepKey, params, { script: text, wpm });
   return saveOutput(projectId, stepKey, out, "mock", { model: "demo" });
 }
 
@@ -199,12 +202,12 @@ export async function createProject(kind: ProjectKind, opts: { parentId?: number
   const prompt = await activePrompt();
   const settings = await getSettings();
   let title = "Новый ролик";
-  const params: ProjectParams = { durationMin: settings.defaults.durationMin, language: settings.defaults.language, styleBlock: settings.defaults.styleBlock };
+  const params: ProjectParams = { durationMin: settings.defaults.durationMin, language: settings.defaults.language };
   if (kind === "short") {
     const parent = opts.parentId ? await getProject(opts.parentId) : null;
     title = parent ? `Шортс: ${parent.title}` : "Новый шортс";
     params.parentId = opts.parentId;
-    params.styleBlock = parent?.params.styleBlock ?? params.styleBlock;
+    if (parent?.params.styleOverride) { params.styleBlock = parent.params.styleBlock; params.styleOverride = true; }
   } else if (opts.role) {
     params.role = opts.role;
     title = `Новый ролик: ${opts.role}`;

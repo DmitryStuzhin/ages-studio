@@ -5,6 +5,7 @@ import "server-only";
 import type { ProjectParams } from "@/db/schema";
 import { structureByKey } from "@/lib/prompts/library";
 import { parseScript, type ParsedScript } from "@/lib/pipeline/parse";
+import { DEFAULT_CANON, animPrompt, effectiveStyle } from "@/lib/canon";
 
 const DEMO = "⚠️ ДЕМО-ОТВЕТ: Claude API не подключён. Это заглушка в правильном формате — для проверки конвейера, не для публикации.\n\n";
 
@@ -80,7 +81,7 @@ export function mockScript(params: ProjectParams, wpm = 155) {
     else if (i === 5) voice = "It is still dark, and the first one is already here.";
     else if (i === verdictAt) voice = "This is what finally takes you, slowly, before the next dawn.";
     else voice = LINES[li++ % LINES.length];
-    if (i === 6) { voice = "You count 40 men on the line, and two are already gone."; marks.push("📌 АКЦЕНТ: ЧИСЛО"); }
+    if (i === 6) { voice = "You count 40 men on the line, and two are already gone."; marks.push("📌 ЧИСЛО"); }
     const act = `Act ${Math.min(6, Math.floor(pct(idx) * 6) + 1)} - Demo`;
     lines.push(
       `Кадр ${String(i).padStart(3, "0")} · ${act} · ⏱ ${hourAt(idx, nFrames)}${threat ? ` · угроза ${threat} · такт: ${beat}` : ""} · напряжение ${Math.min(10, 6 + (i % 4))}/10${marks.length ? ` · метки: ${marks.join(" ")}` : ""}`,
@@ -93,20 +94,18 @@ export function mockScript(params: ProjectParams, wpm = 155) {
   return lines.join("\n");
 }
 
-export function mockFrames(script: ParsedScript, params: ProjectParams, vertical = false) {
-  const style = params.styleBlock?.trim() || "Hand-drawn illustration, muted earthy palette, ink outlines.";
-  const ratio = vertical
-    ? "9:16 vertical composition, subject fills the frame, key action in the middle, no important details in the top 15% and bottom 25%."
-    : "16:9 horizontal composition, centered subject, plenty of negative space.";
+export function mockFrames(script: ParsedScript, params: ProjectParams, vertical = false, styleLine?: string) {
+  const style = styleLine ?? effectiveStyle(DEFAULT_CANON, params, vertical);
+  const ratio = "";
   const frames = vertical ? script.frames.slice(0, 10) : script.frames;
   const out = [DEMO];
   frames.forEach((f, i) => {
     out.push(`Кадр ${vertical ? String(i + 1).padStart(3, "0") : f.id}`);
     out.push(`Озвучка: ${f.voice}`);
-    out.push(`Промпт: A demo scene at ${f.hour ?? "dawn"} light. ${f.screen}. No text, no labels, no captions. ${style} ${ratio}`);
+    out.push(`Промпт: A demo scene at ${f.hour ?? "dawn"} light, ${f.screen.replace(/·/g, ",")}, ${style}${ratio}`);
     out.push(`Референсы: char_you.png`);
-    if (i % 5 === 0) out.push(`Анимация 🎬: Animate this hand-drawn illustration, perfectly preserving the original art style, line work, colors and composition. Subtle limited motion only: dust drifting in the light. Camera locked, no zoom, no pan. No new objects, no style change, no morphing, no 3D, no realism, no added text. Silent, no dialogue, no speech. Smooth subtle 2D motion.`);
-    const edit = [f.hour && `⏱ ${f.hour}`, f.markers.shield && `🛡 ${f.markers.shield}`, f.markers.accent && `📌 АКЦЕНТ: ${f.markers.accent}`].filter(Boolean);
+    if (i % 5 === 0) out.push(`Анимация 🎬: ${animPrompt(DEFAULT_CANON, "dust drifting slowly in the light")}`);
+    const edit = [f.hour && `⏱ ${f.hour}`, f.markers.shield && `🛡 ${f.markers.shield}`, f.markers.accent && `📌 ${f.markers.accent}: 40`, f.markers.verdict && "☠ Cause of death: demo"].filter(Boolean);
     if (edit.length) out.push(`Монтаж: ${edit.join(" · ")}`);
     if (vertical) out.push(`Источник: shot_${f.id}`);
     out.push("");

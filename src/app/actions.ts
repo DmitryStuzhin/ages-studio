@@ -7,6 +7,7 @@ import type { ProjectParams, RetentionPoint } from "@/db/schema";
 import * as svc from "@/lib/server/service";
 import { getSettings, saveSettings } from "@/lib/server/repo";
 import type { AppSettings } from "@/db/seed";
+import type { Canon } from "@/lib/canon";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
@@ -209,6 +210,36 @@ export async function resolveProposalAction(id: number, accept: boolean) {
 export async function saveSettingsAction(next: AppSettings) {
   return wrap(() => saveSettings(next), ["/"], "Настройки сохранены");
 }
+// ---------- Канон и конвейер ----------
+
+export async function saveCanonAction(next: Canon): Promise<ActionResult> {
+  const { saveCanon } = await import("@/lib/server/canon");
+  if (!next.styleLine.trim()) return { ok: false, error: "Строка стиля не может быть пустой" };
+  return wrap(() => saveCanon(next), ["/"], "Канон сохранён — подставится во все следующие шаги");
+}
+
+export async function importCanonAction(): Promise<ActionResult> {
+  const { importCanonFromPipeline } = await import("@/lib/server/canon");
+  try {
+    const r = await importCanonFromPipeline();
+    revalidatePath("/", "layout");
+    return r.ok ? { ok: true, message: r.message } : { ok: false, error: r.message };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function exportToPipelineAction(projectId: number): Promise<ActionResult> {
+  const { exportToPipeline } = await import("@/lib/server/pipeline");
+  try {
+    const r = await exportToPipeline(projectId);
+    revalidatePath("/", "layout");
+    return { ok: true, message: r.written.length ? `В videos/${r.slug}: ${r.written.join(", ")}` : `videos/${r.slug} уже актуальна` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // ---------- YouTube ----------
 
 export async function syncNowAction(): Promise<ActionResult> {

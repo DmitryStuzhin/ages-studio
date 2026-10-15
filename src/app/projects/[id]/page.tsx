@@ -17,6 +17,9 @@ import { MetricsPanel } from "./metrics-panel";
 import { ProjectMenu } from "./project-menu";
 import { getGoogleAuth } from "@/lib/server/sync";
 import { Thumb } from "@/components/video-card";
+import { getCanon } from "@/lib/server/canon";
+import { pipelineStatus } from "@/lib/server/pipeline";
+import { PipelinePanel } from "./pipeline-panel";
 import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +53,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const activeKey = steps.some((s) => s.key === sp.step) ? sp.step! : current;
   const def = steps.find((s) => s.key === activeKey)!;
   const settings = await getSettings();
+  const canon = await getCanon();
   const structure = structureByKey(project.params.structureKey);
   const hook = hookByKey(project.params.hookTypeKey);
   const parent = project.params.parentId ? await getProject(project.params.parentId) : null;
@@ -73,6 +77,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         kind={kind}
         params={project.params}
         defaults={settings.defaults}
+        canon={{ styleLine: canon.styleLine, styleLineVertical: canon.styleLineVertical, animTemplate: canon.animTemplate, importedFrom: canon.source.importedFrom }}
         structures={STRUCTURES.map((s) => ({ key: s.key, name: s.name, idea: s.idea, fits: s.fits, recent: rec.structures.includes(s.key) }))}
         hooks={HOOK_TYPES.map((h) => ({ key: h.key, name: h.name, how: h.how, recent: rec.hookTypes.includes(h.key) }))}
         recent={rec.projects}
@@ -82,8 +87,12 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     );
   } else if (def.mode === "export") {
     const pd = await packageData(project.id, null);
+    const pst = await pipelineStatus(project.id);
     body = (
+      <>
+      {pst && pd.ready && <div className="mb-5"><PipelinePanel projectId={project.id} status={pst} /></div>}
       <ExportStep
+        pipelineManaged={Boolean(pst?.available && pst.exported)}
         projectId={project.id}
         ready={pd.ready}
         scenes={pd.manifest.scenes.length}
@@ -95,6 +104,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         youtubeUrl={project.youtubeUrl}
         aspect={pd.manifest.format.aspectRatio}
       />
+      </>
     );
   } else {
     const prompt = await buildPrompt(project.id, activeKey);

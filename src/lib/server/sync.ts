@@ -98,6 +98,10 @@ async function syncChannel(yt: YouTubeData, channelId: string, log: Log) {
     };
     await db.insert(schema.channelVideos).values({ videoId: v.id, ...row })
       .onConflictDoUpdate({ target: schema.channelVideos.videoId, set: row });
+    // История по дням: из неё считаются просмотры за сутки и неделю по каждому ролику.
+    const h = { views: v.views, likes: v.likes, comments: v.comments };
+    await db.insert(schema.videoHistory).values({ videoId: v.id, day: day(new Date()), ...h })
+      .onConflictDoUpdate({ target: [schema.videoHistory.videoId, schema.videoHistory.day], set: h });
   }
   log.ok(`Статистика ${vids.length} роликов канала обновлена.`);
 
@@ -148,17 +152,29 @@ async function syncNiche(yt: YouTubeData, ownChannelId: string, log: Log) {
       if (e instanceof ApiError && e.status === 403) break; // квота кончилась — дальше бессмысленно
     }
   }
+  // Освежаем и уже известные ролики (не скрытые): просмотры растут, это видно по «скорости».
+  const known = await db.select({ ext: schema.marketItems.externalId, tags: schema.marketItems.tags }).from(schema.marketItems)
+    .where(and(eq(schema.marketItems.source, "api"), eq(schema.marketItems.hidden, false)));
+  for (const k of known) {
+    const id = k.ext?.replace(/^yt:/, "");
+    if (id && !found.has(id) && found.size < 400) found.set(id, k.tags);
+  }
   const vids = (await yt.videos([...found.keys()])).filter((v) => v.channelId !== ownChannelId);
+  const channels = await yt.channelsStats([...new Set(vids.map((v) => v.channelId))]);
   for (const v of vids) {
     const values = {
       kind: "competitor_video" as const, title: v.title, channel: v.channelTitle, url: `https://www.youtube.com/watch?v=${v.id}`,
       views: v.views, publishedAt: v.publishedAt.slice(0, 10), tags: found.get(v.id) ?? "", source: "api" as const,
-      externalId: `yt:${v.id}`, updatedAt: new Date(),
+      externalId: `yt:${v.id}`, updatedAt: new Date(), channelId: v.channelId, channelSubs: channels.get(v.channelId)?.subscribers ?? null,
+      durationSec: v.durationSec, likes: v.likes, comments: v.comments,
     };
     await db.insert(schema.marketItems).values(values).onConflictDoUpdate({
       target: schema.marketItems.externalId,
-      set: { title: values.title, channel: values.channel, views: values.views, updatedAt: values.updatedAt },
+      set: { title: values.title, channel: values.channel, views: values.views, updatedAt: values.updatedAt, channelId: values.channelId, channelSubs: values.channelSubs, durationSec: values.durationSec, likes: values.likes, comments: values.comments },
     });
+    const h = { views: v.views, likes: v.likes, comments: v.comments };
+    await db.insert(schema.videoHistory).values({ videoId: v.id, day: day(new Date()), ...h })
+      .onConflictDoUpdate({ target: [schema.videoHistory.videoId, schema.videoHistory.day], set: h });
   }
   log.ok(`Сводка ниши: ${unique.length} запросов, ${vids.length} роликов конкурентов обновлено.`);
 }
@@ -240,7 +256,54 @@ async function syncAnalytics(auth: GoogleAuth, log: Log) {
       }
     }
   }
+  await syncChannelReports(ya, log);
   if (!added) log.ok("Новых снимков метрик нет: следующие появятся на 2, 7 и 28 день после выхода (с задержкой данных ~3 дня).");
+}
+
+// ---------- Отчёты канала (YouTube Analytics) ----------
+
+export type ReportKey = "daily" | "traffic" | "country" | "demographics" | "device" | "topVideos" | "subscribed" | "playback";
+
+async function saveReport(key: ReportKey, data: unknown) {
+  const db = await getDb();
+  await db.insert(schema.channelReports).values({ key, data, fetchedAt: new Date() })
+    .onConflictDoUpdate({ target: schema.channelReports.key, set: { data, fetchedAt: new Date() } });
+}
+
+/** Всё, что отдаёт Analytics API по каналу: каждый отчёт отдельно, падение одного не мешает остальным. */
+async function syncChannelReports(ya: YouTubeAnalytics, log: Log) {
+  const now = new Date();
+  const end = day(now);
+  const start365 = day(addDays(now, -365));
+  const start90 = day(addDays(now, -90));
+  const jobs: [ReportKey, string, () => Promise<unknown>][] = [
+    ["daily", "динамика по дням (лонги и шортсы)", () => ya.report({ startDate: start365, endDate: end, dimensions: "day,creatorContentType", metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost", sort: "day" })],
+    ["traffic", "источники трафика", () => ya.report({ startDate: start90, endDate: end, dimensions: "insightTrafficSourceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+    ["country", "география", () => ya.report({ startDate: start90, endDate: end, dimensions: "country", metrics: "views,estimatedMinutesWatched,averageViewDuration", sort: "-views", maxResults: "12" })],
+    ["demographics", "возраст и пол", () => ya.report({ startDate: start90, endDate: end, dimensions: "ageGroup,gender", metrics: "viewerPercentage" })],
+    ["device", "устройства", () => ya.report({ startDate: start90, endDate: end, dimensions: "deviceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+    ["topVideos", "топ роликов по времени просмотра", () => ya.report({ startDate: start90, endDate: end, dimensions: "video", metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,likes,shares", sort: "-estimatedMinutesWatched", maxResults: "25" })],
+    ["subscribed", "подписчики и новые зрители", () => ya.report({ startDate: start90, endDate: end, dimensions: "subscribedStatus", metrics: "views,estimatedMinutesWatched,averageViewDuration" })],
+    ["playback", "где смотрят", () => ya.report({ startDate: start90, endDate: end, dimensions: "insightPlaybackLocationType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+  ];
+  const ok: string[] = [];
+  for (const [key, label, fn] of jobs) {
+    try {
+      await saveReport(key, await fn());
+      ok.push(label);
+    } catch (e) {
+      log.warn(`Отчёт «${label}»: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  if (ok.length) log.ok(`Отчёты Analytics: ${ok.join(", ")}.`);
+}
+
+export async function reports() {
+  const db = await getDb();
+  const rows = await db.select().from(schema.channelReports);
+  const out: Partial<Record<ReportKey, { data: Record<string, string | number>[]; fetchedAt: Date }>> = {};
+  for (const r of rows) out[r.key as ReportKey] = { data: r.data as Record<string, string | number>[], fetchedAt: r.fetchedAt };
+  return out;
 }
 
 // ---------- Запуск ----------

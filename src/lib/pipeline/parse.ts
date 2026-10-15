@@ -22,8 +22,13 @@ export type ScriptFrame = {
 
 export type ParsedScript = { frames: ScriptFrame[]; bridge: string | null; totalWords: number; duration: number };
 
+/** Теги Eleven v3 в квадратных скобках не произносятся и в счёт слов не идут. */
+export function stripTags(s: string) {
+  return s.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 export function countWords(s: string) {
-  const m = s.replace(/[«»"“”]/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}'’.,-]*/gu);
+  const m = stripTags(s).replace(/[«»"“”]/g, " ").match(/[\p{L}\p{N}][\p{L}\p{N}'’.,-]*/gu);
   return m ? m.length : 0;
 }
 
@@ -80,7 +85,7 @@ export function parseScript(text: string, wpm = 155): ParsedScript {
           verdict: meta.includes("☠"),
           shield: meta.match(/🛡\s*(\d+\s*\/\s*\d+)/)?.[1]?.replace(/\s/g, "") ?? null,
           animate: meta.includes("🎬"),
-          accent: meta.match(/📌\s*АКЦЕНТ:?\s*([A-ZА-ЯЁ]+)/)?.[1] ?? null,
+          accent: meta.match(/📌\s*(?:АКЦЕНТ:?\s*)?([A-ZА-ЯЁ]{3,})/)?.[1] ?? null,
           unverified: /не проверено/i.test(meta),
         },
       };
@@ -151,7 +156,7 @@ export function parseFrames(text: string): FrameSpec[] {
       animation: field("Анимация"),
       edit,
       source: field("Источник"),
-      accent: edit?.match(/📌\s*АКЦЕНТ:?\s*([A-ZА-ЯЁ]+)/)?.[1] ?? null,
+      accent: edit?.match(/📌\s*(?:АКЦЕНТ:?\s*)?([A-ZА-ЯЁ]{3,})/)?.[1] ?? null,
     });
   }
   return out;
