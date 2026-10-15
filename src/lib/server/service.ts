@@ -269,7 +269,9 @@ export async function costEstimate(projectId: number, stepKey: string) {
   const userTok = Math.round(user.length / 3.2);
   const cold = ((sysTok + userTok) * price.input + def.outTokens * price.output) / 1e6;
   const cached = (sysTok * price.cacheRead + userTok * price.input + def.outTokens * price.output) / 1e6;
-  return { tier: def.tier, model: price.name, inTokens: sysTok + userTok, outTokens: def.outTokens, cold, cached };
+  // Обычно модель пишет 40–60% от лимита ответа — это «типичная» цена; cold — потолок при ответе на весь лимит.
+  const typical = ((sysTok + userTok) * price.input + def.outTokens * 0.5 * price.output) / 1e6;
+  return { tier: def.tier, model: price.name, inTokens: sysTok + userTok, outTokens: def.outTokens, cold, cached, typical };
 }
 
 // ---------- Уроки и правки промпта ----------

@@ -22,7 +22,7 @@ export function LlmStep(props: {
   approvedId: number | null;
   attempts: number;
   apiConnected: boolean;
-  cost: { inTokens: number; outTokens: number; cold: number; cached: number; model: string } | null;
+  cost: { inTokens: number; outTokens: number; cold: number; cached: number; typical: number; model: string } | null;
   hooks: { key: string; text: string }[];
   chosenHook: string | null;
   prevReady: boolean;
@@ -67,7 +67,7 @@ export function LlmStep(props: {
             <div className="text-bone">Промпт шага</div>
             <div className="text-[0.8rem] text-fog">
               Конституция {props.promptVersion} + инструкция шага + контекст из базы
-              {props.cost && <> · ≈{props.cost.inTokens.toLocaleString("ru")} токенов · {TIER[step.tier]} · ${props.cost.cold.toFixed(2)}, с кешем ${props.cost.cached.toFixed(2)}</>}
+              {props.cost && <> · ≈{props.cost.inTokens.toLocaleString("ru")} токенов на вход · {TIER[step.tier]} · обычно ≈${props.cost.typical.toFixed(2)}, максимум ${props.cost.cold.toFixed(2)}</>}
             </div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowPrompt((x) => !x)} aria-expanded={showPrompt}>
