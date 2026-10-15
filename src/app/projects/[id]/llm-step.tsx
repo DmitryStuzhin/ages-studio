@@ -7,6 +7,8 @@ import { GateList } from "@/components/ui";
 import { useAction } from "@/components/use-action";
 import { useToast } from "@/components/toast";
 import { approveAction, editRunAction, generateAction, recheckAction, saveOutputAction, unapproveAction } from "@/app/actions";
+import { useLiveGeneration, LivePanel } from "./live-generation";
+import { Loader2 } from "lucide-react";
 
 type Run = { id: number; output: string; gates: GateResult[]; approved: boolean; source: string; attempt: number; model: string | null };
 
@@ -32,6 +34,7 @@ export function LlmStep(props: {
   const { run, step } = props;
   const toast = useToast();
   const { pending, run: act } = useAction();
+  const live = useLiveGeneration(props.projectId, props.step.key);
   const [text, setText] = useState(run?.output ?? "");
   const [pasting, setPasting] = useState(!run);
   const [fresh, setFresh] = useState("");
@@ -76,13 +79,13 @@ export function LlmStep(props: {
           <button className="btn btn-sm" onClick={copy}><Copy size={15} />Скопировать промпт</button>
           <button
             className="btn btn-primary btn-sm"
-            disabled={!props.apiConnected || pending}
+            disabled={!props.apiConnected || pending || live.busy}
             title={props.apiConnected ? undefined : "Claude API не подключён — см. Настройки"}
-            onClick={() => act(() => generateAction(props.projectId, step.key, "api"))}
+            onClick={() => { setPasting(false); live.start(); }}
           >
-            <Sparkles size={15} />Сгенерировать
+            {live.busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}{live.busy ? "Генерирую…" : "Сгенерировать"}
           </button>
-          <button className="btn btn-ghost btn-sm" disabled={pending} onClick={() => act(() => generateAction(props.projectId, step.key, "mock"))} title="Заглушка в правильном формате — чтобы проверить конвейер">
+          <button className="btn btn-ghost btn-sm" disabled={pending || live.busy} onClick={() => act(() => generateAction(props.projectId, step.key, "mock"))} title="Заглушка в правильном формате — чтобы проверить конвейер">
             <FlaskConical size={15} />Демо
           </button>
         </div>
@@ -103,7 +106,9 @@ export function LlmStep(props: {
             )}
           </div>
 
-          {pasting ? (
+          {live.v.state !== "idle" ? (
+            <LivePanel v={live.v} onDismiss={() => { live.dismiss(); if (!run) setPasting(true); }} />
+          ) : pasting ? (
             <div>
               <textarea
                 className="page min-h-[340px] w-full resize-y p-4 outline-none focus:ring-2 focus:ring-lapis"

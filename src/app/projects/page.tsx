@@ -6,6 +6,7 @@ import { stepDef, stepsFor, type ProjectKind } from "@/lib/pipeline/steps";
 import { createProjectAction } from "../actions";
 import { structureByKey } from "@/lib/prompts/library";
 import { Thumb } from "@/components/video-card";
+import { SubmitButton } from "@/components/submit-button";
 import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
               <input id="role" name="role" className="field" placeholder="Например: Victorian Chimney Sweep" autoFocus={sp.new === "long"} defaultValue={sp.role ? sp.role.replace(/\b\w/g, (c) => c.toUpperCase()) : undefined} />
               <p className="mt-1.5 text-xs text-fog">Оставь пустым — шаг 0 предложит 5 ролей по сводке ниши и канала.</p>
             </div>
-            <button className="btn btn-primary">Создать ролик</button>
+            <SubmitButton pendingText="Создаю ролик…">Создать ролик</SubmitButton>
           </form>
         </Section>
         <Section title="Новый шортс" className={sp.new === "short" ? "ring-1 ring-lapis" : undefined}>
@@ -50,7 +51,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                   {parents.map((r) => <option key={r.p.id} value={r.p.id}>{r.p.title}</option>)}
                 </select>
               </div>
-              <button className="btn btn-primary">Создать шортс</button>
+              <SubmitButton pendingText="Создаю шортс…">Создать шортс</SubmitButton>
             </form>
           ) : (
             <p className="text-sm text-fog">Шортс собирается из утверждённого сценария длинного ролика. Сначала доведи ролик до шага 6.</p>

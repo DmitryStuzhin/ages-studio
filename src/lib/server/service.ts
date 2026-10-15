@@ -16,7 +16,7 @@ import { activePrompt, getProject, getSettings, pastScripts, recentDramaturgy, s
 
 type Project = NonNullable<Awaited<ReturnType<typeof getProject>>>;
 
-async function requireProject(id: number): Promise<Project> {
+export async function requireProject(id: number): Promise<Project> {
   const p = await getProject(id);
   if (!p) throw new Error("Проект не найден");
   return p;

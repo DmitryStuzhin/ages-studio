@@ -99,3 +99,56 @@ export async function anthropicGenerate(opts: { system: string; user: string; mo
     model: data.model,
   };
 }
+
+/** То же, что anthropicGenerate, но ответ приходит по кускам: onText вызывается на каждый фрагмент текста. */
+export async function anthropicStream(
+  opts: { system: string; user: string; model: string; maxTokens: number },
+  on: { text: (t: string) => void; usage?: (u: { input?: number; output?: number }) => void },
+): Promise<LLMResult> {
+  const { key } = anthropicKey();
+  if (!key) throw new Error("Claude API не подключён: вставь ключ в Настройках → Claude API.");
+  const res = await fetch(`${API}/v1/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: opts.model, max_tokens: opts.maxTokens, stream: true,
+      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: opts.user }],
+    }),
+  });
+  if (!res.ok || !res.body) throw new Error(explain(res.status, await res.text()));
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", text = "", model = opts.model, input = 0, output = 0, cacheRead = 0, stop: string | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+      if (!data) continue;
+      let ev: { type: string; delta?: { type?: string; text?: string; stop_reason?: string }; usage?: { output_tokens?: number }; message?: { model?: string; usage?: { input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number } }; error?: { message?: string } };
+      try { ev = JSON.parse(data); } catch { continue; }
+      if (ev.type === "message_start" && ev.message) {
+        model = ev.message.model ?? model;
+        input = ev.message.usage?.input_tokens ?? 0;
+        cacheRead = ev.message.usage?.cache_read_input_tokens ?? 0;
+        on.usage?.({ input: input + cacheRead });
+      } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
+        text += ev.delta.text;
+        on.text(ev.delta.text);
+      } else if (ev.type === "message_delta") {
+        output = ev.usage?.output_tokens ?? output;
+        stop = ev.delta?.stop_reason ?? stop;
+        on.usage?.({ output });
+      } else if (ev.type === "error") {
+        throw new Error(`Claude API: ${ev.error?.message ?? "ошибка потока"}`);
+      }
+    }
+  }
+  if (stop === "max_tokens") text += "\n\n[Ответ оборван лимитом длины — нажми «Сгенерировать» ещё раз или допиши вручную.]";
+  return { text, inputTokens: input, outputTokens: output, cacheRead, model };
+}

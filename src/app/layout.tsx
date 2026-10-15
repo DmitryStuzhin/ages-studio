@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/nav";
 import { Toaster } from "@/components/toast";
+import { TopProgress } from "@/components/top-progress";
 import { GoogleBanner } from "@/components/google-banner";
 
 export const metadata: Metadata = {
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <TopProgress />
         <Toaster>
           <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
             <Nav />
