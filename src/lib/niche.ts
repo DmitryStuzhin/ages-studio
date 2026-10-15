@@ -201,7 +201,7 @@ export function extractRequests(comments: { text: string; likes: number }[]): Re
     const seen = new Set<string>();
     for (const re of REQ_RES) {
       for (const m of c.text.matchAll(re)) {
-        const topic = m[1].trim().toLowerCase().replace(/\s+/g, " ").replace(/\b(video|episode|one|pls|please)$/, "").trim();
+        const topic = m[1].trim().toLowerCase().replace(/\s+/g, " ").replace(/\s+(video|episode|one|pls|please|sometime|someday|soon|again|next|too|maybe)$/, "").trim();
         if (topic.length < 3 || topic.split(" ").length > 5 || STOP.has(topic) || NOT_TOPIC.test(topic) || seen.has(topic)) continue;
         seen.add(topic);
         const r = map.get(topic) ?? { topic, mentions: 0, likes: 0, example: c.text.slice(0, 160) };
