@@ -5,7 +5,7 @@ import { getSettings, snapshots } from "./repo";
 import { reports } from "./sync";
 import {
   dailySeries, forecast, windowDelta, weekdayProfile, sum,
-  TRAFFIC_LABELS, DEVICE_LABELS, PLAYBACK_LABELS, AGE_LABELS, countryName, type Row,
+  TRAFFIC_LABELS, DEVICE_LABELS, PLAYBACK_LABELS, AGE_LABELS, countryName, humanCode, type Row,
 } from "@/lib/stats";
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
@@ -34,16 +34,16 @@ export async function analyticsModel() {
   const shorts90 = sum(points.slice(-90), "shortViews");
 
   const traffic = ((reps.traffic?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.insightTrafficSourceType), label: TRAFFIC_LABELS[String(r.insightTrafficSourceType)] ?? String(r.insightTrafficSourceType),
+    key: String(r.insightTrafficSourceType), label: TRAFFIC_LABELS[String(r.insightTrafficSourceType)] ?? humanCode(String(r.insightTrafficSourceType)),
     value: n(r.views), hours: n(r.estimatedMinutesWatched) / 60,
   })).filter((r) => r.value > 0);
 
   const playback = ((reps.playback?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.insightPlaybackLocationType), label: PLAYBACK_LABELS[String(r.insightPlaybackLocationType)] ?? String(r.insightPlaybackLocationType), value: n(r.views),
+    key: String(r.insightPlaybackLocationType), label: PLAYBACK_LABELS[String(r.insightPlaybackLocationType)] ?? humanCode(String(r.insightPlaybackLocationType)), value: n(r.views),
   })).filter((r) => r.value > 0);
 
   const devices = ((reps.device?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.deviceType), label: DEVICE_LABELS[String(r.deviceType)] ?? String(r.deviceType), value: n(r.views),
+    key: String(r.deviceType), label: DEVICE_LABELS[String(r.deviceType)] ?? humanCode(String(r.deviceType)), value: n(r.views),
   })).filter((r) => r.value > 0);
 
   const countries = ((reps.country?.data ?? []) as Row[]).map((r) => ({

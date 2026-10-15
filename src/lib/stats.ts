@@ -148,6 +148,9 @@ export const TRAFFIC_LABELS: Record<string, string> = {
   LIVE_REDIRECT: "Перенаправление с эфира",
   RELATED_VIDEO_SHORTS: "Рекомендации к Shorts",
   VIDEO_REMIXES: "Ремиксы",
+  SHORTS_CONTENT_LINKS: "Ссылки из Shorts на ролик",
+  IMMERSIVE_LIVE: "Лента эфиров",
+  PRODUCT_PAGE: "Страницы товаров",
 };
 
 export const DEVICE_LABELS: Record<string, string> = {
@@ -157,7 +160,10 @@ export const DEVICE_LABELS: Record<string, string> = {
 export const PLAYBACK_LABELS: Record<string, string> = {
   WATCH: "Страница просмотра", SHORTS: "Лента Shorts", CHANNEL: "Страница канала", BROWSE: "Главная и подборки",
   EMBEDDED: "Встроенный плеер", YT_OTHER: "Другие страницы", SEARCH: "Поиск", EXTERNAL_APP: "Внешние приложения", MOBILE: "Мобильные",
+  SHORTS_FEED: "Лента Shorts", SHORTS_CONTENT_LINKS: "Ссылки из Shorts", YT_PLAYLIST_PAGE: "Страница плейлиста", LIVE: "Эфиры",
 };
+/** Неизвестный код API → «Shorts content links» вместо SHORTS_CONTENT_LINKS. */
+export const humanCode = (c: string) => c.charAt(0) + c.slice(1).toLowerCase().replace(/_/g, " ");
 
 export const AGE_LABELS: Record<string, string> = {
   "age13-17": "13–17", "age18-24": "18–24", "age25-34": "25–34", "age35-44": "35–44", "age45-54": "45–54", "age55-64": "55–64", "age65-": "65+",

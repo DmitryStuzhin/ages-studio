@@ -30,22 +30,24 @@ function useReducedMotion() {
 /** Число, которое «набегает» от 0 при первом показе. */
 export function CountUp({ value, decimals = 0, suffix = "", className }: { value: number; decimals?: number; suffix?: string; className?: string }) {
   const reduced = useReducedMotion();
-  const [shown, setShown] = useState(reduced ? value : 0);
+  // Стартуем с итогового значения: если вкладка в фоне и requestAnimationFrame не тикает,
+  // число всё равно верное. Анимация 0 → value идёт только когда кадры реально рисуются.
+  const [shown, setShown] = useState(value);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (reduced) { setShown(value); return; }
+    if (reduced || document.hidden) { setShown(value); return; }
     let raf = 0;
-    const startTs = performance.now();
-    const from = 0;
+    let startTs = -1;
     const dur = 900;
     const tick = (t: number) => {
+      if (startTs < 0) startTs = t;
       const k = Math.min(1, (t - startTs) / dur);
-      const e = 1 - Math.pow(1 - k, 3);
-      setShown(from + (value - from) * e);
+      setShown(value * (1 - Math.pow(1 - k, 3)));
       if (k < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const done = setTimeout(() => { cancelAnimationFrame(raf); setShown(value); }, dur + 400);
+    return () => { cancelAnimationFrame(raf); clearTimeout(done); };
   }, [value, reduced]);
   return (
     <span ref={ref} className={clsx("tabular-nums", className)}>
