@@ -5,6 +5,8 @@ import { finalScriptText } from "@/lib/server/context";
 import { stepDef, stepsFor, type ProjectKind } from "@/lib/pipeline/steps";
 import { createProjectAction } from "../actions";
 import { structureByKey } from "@/lib/prompts/library";
+import { Thumb } from "@/components/video-card";
+import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +66,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
               <tbody>
                 {work.map(({ p, step, done, total }) => (
                   <tr key={p.id}>
-                    <td><Link href={`/projects/${p.id}`} className="text-bone hover:text-lapis">{p.title}</Link>
-                      {p.params.structureKey && <div className="text-xs text-fog">{structureByKey(p.params.structureKey)?.name}</div>}</td>
+                    <td><div className="flex items-center gap-3"><Thumb videoId={videoIdOf(p.youtubeUrl)} vertical={p.kind === "short"} />
+                      <div className="min-w-0"><Link href={`/projects/${p.id}`} className="text-bone hover:text-lapis">{p.title}</Link>
+                      {p.params.structureKey && <div className="text-xs text-fog">{structureByKey(p.params.structureKey)?.name}</div>}</div></div></td>
                     <td><KindBadge kind={p.kind} /></td>
                     <td className="text-mist">{step?.label}. {step?.title}</td>
                     <td><div className="h-1.5 w-28 rounded bg-ink"><div className="h-1.5 rounded bg-lapis" style={{ width: `${(done / total) * 100}%` }} /></div><div className="mt-1 text-xs text-fog">{done} из {total}</div></td>
@@ -84,8 +87,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           <p className="mb-3 text-sm text-fog">Хранят метрики и уроки. Из них берутся данные для разборов и правило чередования.</p>
           <ul className="divide-y divide-line/70">
             {legacy.map(({ p }) => (
-              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                <Link href={`/projects/${p.id}`} className="text-mist hover:text-bone">{p.title}</Link>
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <Link href={`/projects/${p.id}`} className="flex min-w-0 items-center gap-3 text-mist hover:text-bone"><Thumb videoId={videoIdOf(p.youtubeUrl)} /><span className="truncate">{p.title}</span></Link>
                 <span className="chip">{p.format === "survive24" ? "серия «24 часа»" : "другой формат"}</span>
               </li>
             ))}

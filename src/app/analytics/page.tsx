@@ -9,6 +9,9 @@ import { googleAuthState } from "@/lib/server/sync";
 import { getDb, schema } from "@/db/client";
 import { desc } from "drizzle-orm";
 import { fmtTime } from "@/lib/pipeline/parse";
+import { videoIdOf } from "@/lib/market";
+import { ChannelVideos } from "./channel-videos";
+import { Thumb } from "@/components/video-card";
 
 export const dynamic = "force-dynamic";
 
@@ -40,25 +43,12 @@ export default async function AnalyticsPage() {
       </div>
 
       {videos.length > 0 && (
-        <Section title={`На канале · ${videos.length}`} className="mb-6">
-          <div className="overflow-x-auto">
-            <table className="tbl min-w-[720px]">
-              <thead><tr><th>Ролик</th><th>Вышел</th><th>Длина</th><th>Просмотры</th><th>Лайки</th><th>Комментарии</th></tr></thead>
-              <tbody>
-                {videos.map((v) => (
-                  <tr key={v.videoId}>
-                    <td><a href={`https://youtu.be/${v.videoId}`} target="_blank" rel="noreferrer" className="text-bone hover:text-lapis">{v.title}</a>{v.isShort && <span className="chip ml-2">шортс</span>}</td>
-                    <td className="text-fog">{fmtDate(v.publishedAt)}</td>
-                    <td className="tabular-nums text-mist">{v.durationSec != null ? fmtTime(v.durationSec) : "—"}</td>
-                    <td className="tabular-nums">{v.views?.toLocaleString("ru") ?? "—"}</td>
-                    <td className="tabular-nums">{v.likes ?? "—"}</td>
-                    <td className="tabular-nums">{v.comments ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
+        <section className="mb-6">
+          <ChannelVideos
+            longs={videos.filter((v) => !v.isShort).map((v) => ({ id: v.videoId, title: v.title, published: v.publishedAt ? fmtDate(v.publishedAt) : null, duration: v.durationSec != null ? fmtTime(v.durationSec) : null, views: v.views, likes: v.likes, comments: v.comments, project: projects.find((p) => videoIdOf(p.youtubeUrl) === v.videoId)?.id ?? null }))}
+            shorts={videos.filter((v) => v.isShort).map((v) => ({ id: v.videoId, title: v.title, published: v.publishedAt ? fmtDate(v.publishedAt) : null, duration: v.durationSec != null ? fmtTime(v.durationSec) : null, views: v.views, likes: v.likes, comments: v.comments, project: null }))}
+          />
+        </section>
       )}
 
       <Section title="Проекты на канале">
@@ -69,8 +59,9 @@ export default async function AnalyticsPage() {
               <tbody>
                 {rows.map(({ p, m }) => (
                   <tr key={p.id}>
-                    <td><Link className="text-bone hover:text-lapis" href={`/projects/${p.id}${p.legacy ? "" : "?step=review"}`}>{p.title}</Link>
-                      <div className="text-xs text-fog">{p.kind === "short" ? "шортс" : p.format === "survive24" ? "серия «24 часа»" : "другой формат"}</div></td>
+                    <td><div className="flex items-center gap-3"><Thumb videoId={videoIdOf(p.youtubeUrl)} />
+                      <div className="min-w-0"><Link className="text-bone hover:text-lapis" href={`/projects/${p.id}${p.legacy ? "" : "?step=review"}`}>{p.title}</Link>
+                      <div className="text-xs text-fog">{p.kind === "short" ? "шортс" : p.format === "survive24" ? "серия «24 часа»" : "другой формат"}</div></div></div></td>
                     <td className="text-fog">{m ? `день ${m.day}` : "—"}</td>
                     <td className="tabular-nums">{m?.ctr != null ? `${m.ctr}%` : "—"}</td>
                     <td className="tabular-nums">{m?.avgViewPct != null ? `${m.avgViewPct}%` : "—"}</td>

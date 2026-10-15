@@ -2,6 +2,7 @@ import "server-only";
 import { structureByKey, hookByKey, ROTATION_WINDOW, STRUCTURES, HOOK_TYPES } from "@/lib/prompts/library";
 import { stepDef, type ContextBlock, type ProjectKind } from "@/lib/pipeline/steps";
 import { isolateFinalScript, fmtTime } from "@/lib/pipeline/parse";
+import { isHistoryRelevant } from "@/lib/market";
 import {
   activeLessons, activePrompt, getProject, getSettings, listProjects, marketItems, metricsFor,
   pastScripts, recentDramaturgy, snapshots, stepState,
@@ -88,7 +89,8 @@ async function block(name: ContextBlock, project: Project, state: Awaited<Return
       ].join("\n");
     }
     case "market": {
-      const items = await marketItems();
+      const all = (await marketItems()).filter((m) => !m.hidden);
+      const items = [...all.filter((m) => m.pinned), ...all.filter((m) => !m.pinned && isHistoryRelevant(m))];
       if (!items.length) return "Сводка ниши пуста. Данные о спросе и конкурентах отсутствуют — не выдумывай их.";
       return items.slice(0, 40).map((m) => `- [${m.kind}] ${m.title}${m.channel ? ` · ${m.channel}` : ""}${m.views != null ? ` · ${m.views.toLocaleString("ru")} просм.` : ""}${m.publishedAt ? ` · ${m.publishedAt}` : ""}${m.angle ? ` · угол: ${m.angle}` : ""}`).join("\n");
     }

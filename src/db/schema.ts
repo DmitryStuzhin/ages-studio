@@ -134,6 +134,10 @@ export const marketItems = pgTable("market_items", {
   tags: text("tags").notNull().default(""),
   source: text("source").$type<"manual" | "api">().notNull().default("manual"),
   externalId: text("external_id"),
+  /** Скрыт автором как нерелевантный: не показывается и не уходит в промпты, при синхронизации не возвращается. */
+  hidden: boolean("hidden").notNull().default(false),
+  /** Отмечен автором как важный референс: всегда попадает в промпты первым. */
+  pinned: boolean("pinned").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -160,6 +160,13 @@ export async function addMarketAction(form: FormData): Promise<ActionResult> {
   }, ["/"], "Добавлено в сводку ниши");
 }
 
+export async function setMarketFlagAction(id: number, flag: "hidden" | "pinned", value: boolean) {
+  return wrap(async () => {
+    const db = await getDb();
+    await db.update(schema.marketItems).set(flag === "hidden" ? { hidden: value, pinned: false } : { pinned: value }).where(eq(schema.marketItems.id, id));
+  }, ["/"], flag === "hidden" ? (value ? "Скрыто — больше не появится в сводке" : "Возвращено") : (value ? "Закреплено — всегда в промптах" : "Откреплено"));
+}
+
 export async function deleteMarketAction(id: number) {
   return wrap(async () => {
     const db = await getDb();

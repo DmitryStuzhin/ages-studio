@@ -16,6 +16,8 @@ import { ExportStep } from "./export-step";
 import { MetricsPanel } from "./metrics-panel";
 import { ProjectMenu } from "./project-menu";
 import { getGoogleAuth } from "@/lib/server/sync";
+import { Thumb } from "@/components/video-card";
+import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     return (
       <div className="mx-auto max-w-5xl">
         <Link href="/projects" className="text-sm text-fog hover:text-mist">← Ролики</Link>
-        <h1 className="mt-2 text-[1.75rem] leading-tight">{project.title}</h1>
+        <div className="mt-2 flex items-center gap-4">
+          {videoIdOf(project.youtubeUrl) && <a href={project.youtubeUrl!} target="_blank" rel="noreferrer"><Thumb videoId={videoIdOf(project.youtubeUrl)} /></a>}
+          <h1 className="text-[1.75rem] leading-tight">{project.title}</h1>
+        </div>
         <p className="mt-1 text-mist">Ролик вышел до платформы: здесь хранятся его метрики. Они попадают в сводку канала и разборы.</p>
         <div className="mt-6"><MetricsPanel projectId={project.id} metrics={metrics} kind={kind} analytics={analytics} /></div>
       </div>
