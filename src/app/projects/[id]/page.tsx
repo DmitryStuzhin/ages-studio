@@ -20,6 +20,7 @@ import { Thumb } from "@/components/video-card";
 import { getCanon } from "@/lib/server/canon";
 import { pipelineStatus } from "@/lib/server/pipeline";
 import { PipelinePanel } from "./pipeline-panel";
+import { voicePlan } from "@/lib/server/voice";
 import { videoIdOf } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
@@ -88,9 +89,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   } else if (def.mode === "export") {
     const pd = await packageData(project.id, null);
     const pst = await pipelineStatus(project.id);
+    const vplan = pst?.exported ? await voicePlan(project.id) : null;
     body = (
       <>
-      {pst && pd.ready && <div className="mb-5"><PipelinePanel projectId={project.id} status={pst} /></div>}
+      {pst && pd.ready && <div className="mb-5"><PipelinePanel projectId={project.id} status={pst} voice={vplan} /></div>}
       <ExportStep
         pipelineManaged={Boolean(pst?.available && pst.exported)}
         projectId={project.id}

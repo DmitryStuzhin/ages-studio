@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS = {
     wordsPerMinute: 155,
   },
   models: { opus: "claude-opus-5-5", sonnet: "claude-sonnet-5-5", haiku: "claude-haiku-5-5" },
-  elevenlabs: { monthlyCredits: 30000, creditsPerChar: 1 },
+  elevenlabs: { monthlyCredits: 30000, creditsPerChar: 1, voiceId: "", voiceName: "", model: "eleven_v3" as string },
   google: {
     // OAuth-приложение в режиме Testing: Google отзывает доступ через 7 дней после входа.
     testingMode: true,

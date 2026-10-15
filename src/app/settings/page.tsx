@@ -2,7 +2,8 @@ import { PageHeader, Section } from "@/components/ui";
 import { getSettings } from "@/lib/server/repo";
 import { integrations } from "@/lib/integrations/status";
 import { MODEL_PRICES, LONG_STEPS } from "@/lib/pipeline/steps";
-import { SettingsForm, GoogleConnect, CanonForm } from "./client";
+import { SettingsForm, GoogleConnect, CanonForm, ElevenConnect } from "./client";
+import { elevenState } from "@/lib/server/voice";
 import { getCanon } from "@/lib/server/canon";
 import { oauthConfigured } from "@/lib/integrations/youtube";
 import { googleAuthState } from "@/lib/server/sync";
@@ -53,6 +54,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Section title="Канон канала">
           <p className="mb-4 text-sm text-mist">Всё, что одинаково во всех роликах. Подставляется в шаги, гейты, пакет и экспорт в конвейер автоматически — в формах проекта этого больше нет.</p>
           <CanonForm initial={await getCanon()} />
+        </Section>
+      </section>
+
+      <section id="elevenlabs" className="mb-6 scroll-mt-6">
+        <Section title="ElevenLabs">
+          <ElevenConnect state={await elevenState()} voiceId={settings.elevenlabs.voiceId} model={settings.elevenlabs.model} />
         </Section>
       </section>
 

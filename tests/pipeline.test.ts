@@ -113,3 +113,15 @@ test("прогноз: при нулевом темпе цели нет, при �
   const z = forecast({ points: pts, pick: () => 0, now: 0, goal: 400, deadline: "2099-01-01" });
   assert.equal(z.eta, null);
 });
+
+import { parseCsv, splitParts, voiceShots } from "../src/lib/pipeline/voice-split";
+test("voice split: CSV с кавычками и разбивка по актам как в voice_script.py", () => {
+  const rows = parseCsv('shot,voice,notes\n1,"Hello, ""you"".",⏱ 00:00\n2,"Line\ntwo",\n');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].voice, 'Hello, "you".');
+  const csv = ["shot,scene,voice,notes", ...Array.from({ length: 30 }, (_, i) => `${i + 1},A,${"word ".repeat(20).trim()},${i % 10 === 0 ? "⏱" : ""}`)].join("\n");
+  const parts = splitParts(voiceShots(csv), 1000);
+  assert.ok(parts.length > 1);
+  assert.equal(parts.flat().length, 30);
+  assert.equal(parts[1][0].shot % 10, 1); // часть начинается со смены акта
+});

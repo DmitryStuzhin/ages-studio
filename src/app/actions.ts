@@ -264,3 +264,29 @@ export async function disconnectGoogleAction(): Promise<ActionResult> {
 export async function getSettingsAction() {
   return getSettings();
 }
+
+// ---------- ElevenLabs ----------
+
+export async function saveElevenKeyAction(key: string): Promise<ActionResult> {
+  const { saveElevenKey } = await import("@/lib/server/voice");
+  return wrap(() => saveElevenKey(key), ["/"], "Ключ проверен и сохранён в .env конвейера");
+}
+
+export async function saveVoiceAction(voiceId: string, voiceName: string, model: string): Promise<ActionResult> {
+  const { syncVoiceToPipelineEnv } = await import("@/lib/server/voice");
+  return wrap(async () => {
+    const s = await getSettings();
+    await saveSettings({ ...s, elevenlabs: { ...s.elevenlabs, voiceId, voiceName, model } });
+    await syncVoiceToPipelineEnv(voiceId, model);
+  }, ["/"], `Голос: ${voiceName}`);
+}
+
+export async function startVoiceAction(projectId: number): Promise<ActionResult> {
+  const { startFullVoice } = await import("@/lib/server/voice");
+  return wrap(() => startFullVoice(projectId), ["/"], "Озвучка запущена");
+}
+
+export async function startFragmentAction(projectId: number, from: number, to: number): Promise<ActionResult> {
+  const { startFragmentVoice } = await import("@/lib/server/voice");
+  return wrap(() => startFragmentVoice(projectId, from, to), ["/"], "Переозвучка куска запущена");
+}

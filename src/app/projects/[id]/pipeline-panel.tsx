@@ -5,6 +5,8 @@ import { useAction } from "@/components/use-action";
 import { useToast } from "@/components/toast";
 import { exportToPipelineAction } from "@/app/actions";
 import type { PipelineStatus } from "@/lib/server/pipeline";
+import type { VoicePlan } from "@/lib/server/voice";
+import { VoiceBlock } from "./voice-block";
 
 function Bar({ label, done, total, tone = "lapis" }: { label: string; done: number; total: number; tone?: "lapis" | "malachite" }) {
   const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
@@ -19,7 +21,7 @@ function Bar({ label, done, total, tone = "lapis" }: { label: string; done: numb
 }
 
 /** Связь с локальным конвейером: экспорт раскадровки и прогресс по файлам в папке ролика. */
-export function PipelinePanel({ projectId, status }: { projectId: number; status: PipelineStatus }) {
+export function PipelinePanel({ projectId, status, voice }: { projectId: number; status: PipelineStatus; voice?: VoicePlan | null }) {
   const { pending, run } = useAction();
   const toast = useToast();
   const v = `videos/${status.slug}`;
@@ -83,6 +85,8 @@ export function PipelinePanel({ projectId, status }: { projectId: number; status
       {status.hasFinal && (
         <p className="mt-3 flex items-center gap-2 text-sm text-malachite"><FolderCheck size={16} />final.mp4 готов{status.finalSize ? ` · ${(status.finalSize / 1048576).toFixed(0)} МБ` : ""}. Посмотри целиком и публикуй.</p>
       )}
+
+      {voice && <VoiceBlock projectId={projectId} plan={voice} />}
 
       <details className="mt-5">
         <summary className="cursor-pointer text-sm text-mist hover:text-bone">Команды конвейера для этого ролика</summary>

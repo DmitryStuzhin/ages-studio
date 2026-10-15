@@ -2,6 +2,8 @@ import "server-only";
 import { anthropicConfigured } from "./anthropic";
 import { oauthConfigured } from "./youtube";
 import { getGoogleAuth } from "@/lib/server/sync";
+import { elevenKey } from "./elevenlabs";
+import { getCanon, expandHome } from "@/lib/server/canon";
 
 // Статус интеграций. Пока API не подключены, каждая интеграция имеет ручной режим,
 // который платформа поддерживает полностью — подключение API только убирает ручную работу.
@@ -20,6 +22,7 @@ export async function integrations(): Promise<Integration[]> {
   const google = await getGoogleAuth();
   const yd = Boolean(process.env.YOUTUBE_API_KEY);
   const ya = Boolean(google) && !google?.expiredAt && oauthConfigured();
+  const el = await elevenKey(expandHome((await getCanon()).pipelineDir));
   return [
     {
       key: "anthropic", name: "Claude API", connected: anthropicConfigured(), state: anthropicConfigured() ? "подключено" : "ручной режим", env: ["ANTHROPIC_API_KEY"],
@@ -39,9 +42,10 @@ export async function integrations(): Promise<Integration[]> {
       manual: "Внести цифры из YouTube Studio в разделе «Аналитика». OAuth-приложение держи в режиме «В рабочей среде», иначе вход сбрасывается через 7 дней.",
     },
     {
-      key: "elevenlabs", name: "ElevenLabs", connected: Boolean(process.env.ELEVENLABS_API_KEY), state: process.env.ELEVENLABS_API_KEY ? "ключ задан" : "ручной режим", env: ["ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID"],
-      replaces: "Озвучка по сценам с таймкодами слов — точные тайминги в manifest.json и SRT.",
-      manual: "Озвучить чистый текст из шага 7 вручную; тайминги в пакете считаются по 155 слов/мин.",
+      key: "elevenlabs", name: "ElevenLabs", connected: Boolean(el.key),
+      state: el.key ? (el.where === "pipeline" ? "ключ в .env конвейера" : "ключ задан") : "ручной режим", env: ["ELEVENLABS_API_KEY → Настройки → ElevenLabs"],
+      replaces: "Кнопка «Озвучить» в шаге «Пакет видео»: текст из storyboard.csv режется на части и сохраняется в audio/voice_01.mp3 … папки ролика; переозвучка куска по номерам кадров. Остаток кредитов виден здесь же.",
+      manual: "Озвучить voice_script.txt в ElevenLabs вручную и положить файлы в audio/.",
     },
     {
       key: "drive", name: "Google Drive", connected: Boolean(process.env.GOOGLE_DRIVE_FOLDER_ID), state: process.env.GOOGLE_DRIVE_FOLDER_ID ? "папка задана" : "ручной режим", env: ["GOOGLE_DRIVE_FOLDER_ID"],
