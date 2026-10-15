@@ -24,7 +24,7 @@ export type MyVideo = { title: string; durationSec: number | null; isShort: bool
 
 export type Enriched<T extends NicheItem = NicheItem> = T & {
   videoId: string | null; sim: number; reasons: string[]; role: string | null; era: string | null;
-  vpd: number; outlier: number; power: number; isShort: boolean; formatChannel: boolean; mineRole: boolean;
+  vpd: number; outlier: number; power: number; isShort: boolean; formatChannel: boolean; mineRole: boolean; history: boolean;
 };
 
 const STOP = new Set("a an the of in as to and or for on at by with you your yours would wouldnt could couldnt can why how what was were is be this that it its from into one hours hour 24 day days life survive surviving".split(" "));
@@ -64,7 +64,9 @@ export function roleOf(title: string): string | null {
   const m = title.match(/\b(?:as|being|be|of|like)\s+(?:an?|the)\s+([A-Za-z][A-Za-z' -]{2,40}?)(?=\s*(?:[(\[|:!?.,—–-]|\b(?:in|during|for|was|were|is|who|that|would|and|at|on|vs|from|before|after)\b|$))/i);
   if (!m) return null;
   const r = m[1].trim().toLowerCase().replace(/\s+/g, " ").replace(/s$/, (x) => (/(ss|us)$/.test(m[1].toLowerCase()) ? x : ""));
-  return r.split(" ").length <= 4 ? r : null;
+  // Не роль, а описание: «cold war explained», «girl married too young», «woman caught».
+  if (/\b(explained|married|caught|young|old|too|very|real|true|story|stories|documentary|history|life|day|time|world|war)\b/.test(r) && !/\b(soldier|warrior|knight|nun|monk|doctor)\b/.test(r)) return null;
+  return r.split(" ").length <= 3 ? r : null;
 }
 
 const median = (xs: number[]) => {
@@ -122,11 +124,10 @@ export function enrich<T extends NicheItem>(items: T[], mine: MyVideo[]): Enrich
     const d = m.durationSec ?? 0;
     const isShort = d > 0 && d <= 180;
     if (!isShort && d >= prof.longMin && d <= prof.longMax) { sim += 15; reasons.push(`длина ${Math.round(d / 60)} мин — как у тебя`); }
-    else if (!isShort && d > 0) sim += 5;
     if (STYLE.test(text)) { sim += 10; reasons.push("анимация или иллюстрации"); }
     const vpd = viewsPerDay(m.views, m.publishedTs ?? m.publishedAt) ?? 0;
     const outlier = m.views != null ? m.views / Math.max(m.channelSubs ?? 0, 1000) : 0;
-    return { ...m, videoId: idOf(m), sim, reasons, role, era, vpd, outlier, power: 0, isShort, formatChannel: false, mineRole };
+    return { ...m, videoId: idOf(m), sim, reasons, role, era, vpd, outlier, power: 0, isShort, formatChannel: false, mineRole, history };
   });
   // Каналы формата: снимают похожее постоянно — их ролики ближе всего к твоим.
   const byChannel = new Map<string, number[]>();
@@ -147,7 +148,8 @@ export function enrich<T extends NicheItem>(items: T[], mine: MyVideo[]): Enrich
 }
 
 export const SIMILAR_MIN = 55;
-export const isSimilar = (e: Enriched) => !e.hidden && !e.isShort && (e.sim >= SIMILAR_MIN || e.pinned);
+/** Похожий = исторический, не шортс, не часовая документалка и набрал порог сходства. Закреплённые — всегда. */
+export const isSimilar = (e: Enriched) => !e.hidden && (e.pinned || (!e.isShort && e.history && (e.durationSec ?? 0) <= 40 * 60 && e.sim >= SIMILAR_MIN));
 
 // ---------- Совет ----------
 
@@ -183,19 +185,30 @@ const TITLE_FEATURES: [string, string, RegExp][] = [
 ];
 const DAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 
-const REQ_RE = /\b(?:please\s+)?(?:do|make|cover|next(?:\s+(?:one|video|episode))?\s*(?:should be|:|-)?|you should do|can you do|could you do|how about|what about)\s+(?:a\s+(?:video|episode)\s+(?:on|about)\s+)?(?:one\s+(?:on|about)\s+)?(?:an?|the)?\s*([A-Za-z][A-Za-z' -]{2,40}?)(?=[.!?,\n]|\s+(?:next|please|pls|plz|too|as well)\b|$)/gi;
+// Только явные просьбы: «do a video on X», «make one about X», «do X next», «you should do X», «can you do X».
+const REQ_RES = [
+  /\b(?:do|make|cover)\s+(?:a|an|another)\s+(?:video|episode)\s+(?:on|about)\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z' -]{2,40}?)(?=[.!?,\n]|\s+(?:next|please|pls|too)\b|$)/gi,
+  /\b(?:do|make)\s+one\s+(?:on|about)\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z' -]{2,40}?)(?=[.!?,\n]|\s+(?:next|please|pls|too)\b|$)/gi,
+  /\b(?:please\s+)?do\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z' -]{2,30}?)\s+next\b/gi,
+  /\b(?:you should|can you|could you|pls|please)\s+(?:do|make|cover)\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z' -]{2,40}?)(?=[.!?,\n]|\s+(?:next|please|pls|too)\b|$)/gi,
+  /\bnext (?:video|episode|one)\s*(?:should be|:|-)\s*(?:an?\s+|the\s+)?([A-Za-z][A-Za-z' -]{2,40}?)(?=[.!?,\n]|$)/gi,
+];
+const NOT_TOPIC = /^(it|this|that|more|same|them|me|us|part|another|please|pls|plz|so|too|next|video|one|something|anything|everything|what|how|why|my|his|her|their|our|your|much|some|all|this one|that one)\b/;
 
 export function extractRequests(comments: { text: string; likes: number }[]): Request[] {
   const map = new Map<string, Request>();
   for (const c of comments) {
-    for (const m of c.text.matchAll(REQ_RE)) {
-      const raw = m[1].trim().toLowerCase().replace(/\s+/g, " ");
-      const topic = raw.replace(/^(video|episode)\s+(on|about)\s+/, "").replace(/\b(video|episode|one)\b$/, "").trim();
-      if (topic.length < 3 || topic.split(" ").length > 5 || STOP.has(topic) || /^(it|this|that|more|same|them|me|us|part|another|please|pls|plz|so|too|next)\b/.test(topic)) continue;
-      const r = map.get(topic) ?? { topic, mentions: 0, likes: 0, example: c.text.slice(0, 160) };
-      r.mentions += 1;
-      r.likes += c.likes;
-      map.set(topic, r);
+    const seen = new Set<string>();
+    for (const re of REQ_RES) {
+      for (const m of c.text.matchAll(re)) {
+        const topic = m[1].trim().toLowerCase().replace(/\s+/g, " ").replace(/\b(video|episode|one|pls|please)$/, "").trim();
+        if (topic.length < 3 || topic.split(" ").length > 5 || STOP.has(topic) || NOT_TOPIC.test(topic) || seen.has(topic)) continue;
+        seen.add(topic);
+        const r = map.get(topic) ?? { topic, mentions: 0, likes: 0, example: c.text.slice(0, 160) };
+        r.mentions += 1;
+        r.likes += c.likes;
+        map.set(topic, r);
+      }
     }
   }
   return [...map.values()].sort((a, b) => b.mentions * 3 + Math.log1p(b.likes) - (a.mentions * 3 + Math.log1p(a.likes))).slice(0, 10);
@@ -234,7 +247,7 @@ export function buildAdvice(similar: Enriched[], mine: MyVideo[], comments: { te
       recent: xs.filter((x) => x.publishedAt && new Date(x.publishedTs ?? x.publishedAt).getTime() >= since).length,
     };
   }).sort((a, b) => b.best - a.best);
-  const ideas = roles.filter((r) => !r.mine && r.best >= 60 && r.recent < 3).slice(0, 6);
+  const ideas = roles.filter((r) => !r.mine && r.best >= 60 && r.recent < 3 && (r.era || r.count >= 2)).slice(0, 6);
   const saturated = roles.filter((r) => r.recent >= 3).slice(0, 5);
 
   const eraMap = new Map<string, number[]>();
