@@ -2,7 +2,8 @@ import { PageHeader, Section } from "@/components/ui";
 import { getSettings } from "@/lib/server/repo";
 import { integrations } from "@/lib/integrations/status";
 import { MODEL_PRICES, LONG_STEPS } from "@/lib/pipeline/steps";
-import { SettingsForm, GoogleConnect, CanonForm, ElevenConnect } from "./client";
+import { SettingsForm, GoogleConnect, CanonForm, ElevenConnect, AnthropicConnect, type AnthropicState } from "./client";
+import { anthropicKey, verifyAnthropicKey } from "@/lib/integrations/anthropic";
 import { elevenState } from "@/lib/server/voice";
 import { getCanon } from "@/lib/server/canon";
 import { oauthConfigured } from "@/lib/integrations/youtube";
@@ -19,6 +20,18 @@ const GOOGLE_MSG: Record<string, string> = {
   error: "Не удалось завершить вход — подробности в консоли сервера.",
   not_configured: "Сначала впиши GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET в .env.local и перезапусти платформу.",
 };
+
+async function anthropicState(models: Record<string, string>): Promise<AnthropicState> {
+  const { key, where } = anthropicKey();
+  if (!key) return { where: null, error: null, models: [], wanted: [] };
+  try {
+    const list = await verifyAnthropicKey(key);
+    const ids = new Set(list.map((m) => m.id));
+    return { where, error: null, models: list, wanted: Object.entries(models).map(([tier, id]) => ({ tier, id, ok: ids.has(id) || [...ids].some((x) => x.startsWith(id)) })) };
+  } catch (e) {
+    return { where, error: e instanceof Error ? e.message : String(e), models: [], wanted: [] };
+  }
+}
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {
   const sp = await searchParams;
@@ -54,6 +67,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Section title="Канон канала">
           <p className="mb-4 text-sm text-mist">Всё, что одинаково во всех роликах. Подставляется в шаги, гейты, пакет и экспорт в конвейер автоматически — в формах проекта этого больше нет.</p>
           <CanonForm initial={await getCanon()} />
+        </Section>
+      </section>
+
+      <section id="claude" className="mb-6 scroll-mt-6">
+        <Section title="Claude API">
+          <AnthropicConnect state={await anthropicState(settings.models)} />
         </Section>
       </section>
 

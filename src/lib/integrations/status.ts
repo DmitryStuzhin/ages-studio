@@ -25,7 +25,7 @@ export async function integrations(): Promise<Integration[]> {
   const el = await elevenKey(expandHome((await getCanon()).pipelineDir));
   return [
     {
-      key: "anthropic", name: "Claude API", connected: anthropicConfigured(), state: anthropicConfigured() ? "подключено" : "ручной режим", env: ["ANTHROPIC_API_KEY"],
+      key: "anthropic", name: "Claude API", connected: anthropicConfigured(), state: anthropicConfigured() ? "подключено" : "ручной режим", env: ["ANTHROPIC_API_KEY → Настройки → Claude API"],
       replaces: "Кнопка «Сгенерировать» в каждом шаге: промпт с конституцией (кеш) и контекстом уходит в API.",
       manual: "«Скопировать промпт» → вставить в чат Claude → вставить ответ обратно. Гейты и всё остальное работают так же.",
     },

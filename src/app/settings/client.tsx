@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AppSettings } from "@/db/seed";
 import { Section } from "@/components/ui";
 import { useAction } from "@/components/use-action";
-import { disconnectGoogleAction, saveSettingsAction, saveCanonAction, importCanonAction, saveElevenKeyAction, saveVoiceAction } from "@/app/actions";
+import { disconnectGoogleAction, saveSettingsAction, saveCanonAction, importCanonAction, saveElevenKeyAction, saveVoiceAction, saveAnthropicKeyAction } from "@/app/actions";
 import type { ElevenState } from "@/lib/server/voice";
 import { VoicePicker } from "./voice-picker";
 import type { Canon } from "@/lib/canon";
@@ -186,6 +186,35 @@ export function ElevenConnect({ state, model }: { state: ElevenState; model: str
         </div>
       </div>
       {state.keyWhere && !state.error && <div className="border-t border-line pt-5"><VoicePicker voices={state.voices} current={state.current} model={model} credits={left} /></div>}
+    </div>
+  );
+}
+
+export type AnthropicState = { where: "env" | "file" | null; error: string | null; models: { id: string; name: string }[]; wanted: { tier: string; id: string; ok: boolean }[] };
+
+export function AnthropicConnect({ state }: { state: AnthropicState }) {
+  const { pending, run } = useAction();
+  const [key, setKey] = useState("");
+  const ok = state.where && !state.error;
+  return (
+    <div className="space-y-4">
+      <div className={ok ? "text-sm text-malachite" : state.error ? "text-sm text-cinnabar" : "text-sm text-fog"}>
+        {state.error ?? (ok ? `Ключ работает${state.where === "env" ? " (задан в окружении)" : ""} · кнопка «Сгенерировать» в шагах включена` : "Ключ не задан — шаги работают в ручном режиме через чат")}
+      </div>
+      {ok && (
+        <div className="flex flex-wrap gap-2">
+          {state.wanted.map((w) => (
+            <span key={w.tier} className={clsx("rounded-full border px-2.5 py-1 text-[0.78rem]", w.ok ? "border-malachite/30 bg-malachite/10 text-malachite" : "border-cinnabar/30 bg-cinnabar/10 text-cinnabar")}>
+              {w.id} {w.ok ? "доступна" : "недоступна этому ключу"}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex max-w-xl flex-wrap gap-2">
+        <input className="field min-w-0 flex-1 font-mono text-[0.85rem]" type="password" autoComplete="off" placeholder={state.where ? "Новый ключ sk-ant-… (чтобы заменить)" : "Ключ sk-ant-api…"} value={key} onChange={(e) => setKey(e.target.value)} aria-label="Ключ Claude API" />
+        <button className="btn" disabled={pending || !key.trim()} onClick={() => run(() => saveAnthropicKeyAction(key), () => setKey(""))}>Проверить и сохранить</button>
+      </div>
+      <p className="text-[0.82rem] text-fog">Ключ проверяется бесплатным запросом списка моделей и сохраняется в .env.local платформы — перезапуск не нужен. Взять ключ: platform.claude.com → API Keys. Баланс пополняется там же, в Billing.</p>
     </div>
   );
 }

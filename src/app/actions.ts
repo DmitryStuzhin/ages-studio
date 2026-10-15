@@ -300,3 +300,14 @@ export async function testVoiceAction(id: string, model: string, text: string) {
   const { testVoice } = await import("@/lib/server/voice");
   try { return { ok: true as const, ...(await testVoice(id, model, text)) }; } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) }; }
 }
+
+export async function saveAnthropicKeyAction(key: string): Promise<ActionResult> {
+  const { saveAnthropicKey } = await import("@/lib/integrations/anthropic");
+  try {
+    const models = await saveAnthropicKey(key);
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Ключ работает · доступно моделей: ${models.length}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
