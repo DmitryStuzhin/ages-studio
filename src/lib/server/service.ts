@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db/client";
 import type { GateResult, ProjectParams } from "@/db/schema";
-import { stepDef, stepsFor, MODEL_PRICES, type ProjectKind } from "@/lib/pipeline/steps";
+import { budgetFor, stepDef, stepsFor, MODEL_PRICES, type ProjectKind } from "@/lib/pipeline/steps";
 import { runGates, gatesBlocking } from "@/lib/pipeline/gates";
 import { parseAngle, parseFrames, parsePackaging, parseReview, parseScript, extractElevenLabs } from "@/lib/pipeline/parse";
 import { buildManifest, buildZip, checkFrames } from "@/lib/pipeline/package";
@@ -88,7 +88,8 @@ export async function generate(projectId: number, stepKey: string, mode: "api" |
     if (!anthropicConfigured()) throw new Error("Claude API не подключён. Используй ручной режим или демо.");
     const settings = await getSettings();
     const { system, user } = await buildPrompt(projectId, stepKey);
-    const r = await anthropicGenerate({ system, user, model: settings.models[def.tier], maxTokens: Math.min(64000, def.outTokens * 2) });
+    const b = budgetFor(def);
+    const r = await anthropicGenerate({ system, user, model: settings.models[def.tier], maxTokens: b.maxTokens, effort: b.effort });
     return saveOutput(projectId, stepKey, r.text, "api", { model: r.model, inputTokens: r.inputTokens, outputTokens: r.outputTokens });
   }
   const { text, parsed, wpm } = await scriptFor(project);
@@ -267,10 +268,11 @@ export async function costEstimate(projectId: number, stepKey: string) {
   const price = MODEL_PRICES[def.tier];
   const sysTok = Math.round(system.length / 3.2);
   const userTok = Math.round(user.length / 3.2);
-  const cold = ((sysTok + userTok) * price.input + def.outTokens * price.output) / 1e6;
-  const cached = (sysTok * price.cacheRead + userTok * price.input + def.outTokens * price.output) / 1e6;
-  // Обычно модель пишет 40–60% от лимита ответа — это «типичная» цена; cold — потолок при ответе на весь лимит.
-  const typical = ((sysTok + userTok) * price.input + def.outTokens * 0.5 * price.output) / 1e6;
+  const b = budgetFor(def);
+  // Потолок — если модель израсходует весь лимит (ответ + размышления); типичная — обычный ответ и размышления.
+  const cold = ((sysTok + userTok) * price.input + b.maxTokens * price.output) / 1e6;
+  const cached = (sysTok * price.cacheRead + userTok * price.input + b.maxTokens * price.output) / 1e6;
+  const typical = ((sysTok + userTok) * price.input + b.typicalOut * price.output) / 1e6;
   return { tier: def.tier, model: price.name, inTokens: sysTok + userTok, outTokens: def.outTokens, cold, cached, typical };
 }
 

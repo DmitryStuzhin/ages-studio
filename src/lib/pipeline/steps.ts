@@ -158,3 +158,20 @@ export const MODEL_PRICES: Record<ModelTier, { id: string; name: string; input: 
   sonnet: { id: "claude-sonnet-5-5", name: "Sonnet 5.5", input: 2, output: 10, cacheRead: 0.1 },
   haiku: { id: "claude-haiku-5-5", name: "Haiku 5.5", input: 0.1, output: 0.5, cacheRead: 0.01 },
 };
+
+// ---------- Размышления модели ----------
+// Модели 5.5 перед ответом размышляют; это повышает качество, но тратит лимит ответа и деньги (как выход).
+// Глубина размышлений по шагам: где решается смысл ролика — medium, механические шаги — low.
+export type Effort = "low" | "medium" | "high";
+const DEEP = new Set(["recon", "angle", "threats", "script", "audit", "review", "s_script"]);
+const THINK_RESERVE: Record<Effort, number> = { low: 4000, medium: 12000, high: 24000 };
+const THINK_TYPICAL: Record<Effort, number> = { low: 800, medium: 3000, high: 8000 };
+
+export function budgetFor(def: { key: string; outTokens: number }) {
+  const effort: Effort = DEEP.has(def.key) ? "medium" : "low";
+  return {
+    effort,
+    maxTokens: Math.min(64000, def.outTokens * 2 + THINK_RESERVE[effort]),
+    typicalOut: Math.round(def.outTokens * 0.5 + THINK_TYPICAL[effort]),
+  };
+}

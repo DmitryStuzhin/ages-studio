@@ -9,6 +9,7 @@ export type LiveView = {
   state: "idle" | "thinking" | "writing" | "done" | "error";
   text?: string; model?: string; elapsed?: number; waitFirst?: number;
   inTokens?: number; outTokens?: number; expectedOut?: number; maxOut?: number; error?: string | null; cost?: number;
+  phase?: "start" | "thinking" | "writing"; effort?: string; thinkingTokens?: number; cut?: boolean;
 };
 
 const mmss = (ms = 0) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
@@ -28,7 +29,11 @@ export function useLiveGeneration(projectId: number, stepKey: string) {
       // При заходе на страницу показываем только идущую генерацию; готовую видно как новую попытку.
       setV(!announce && (j.state === "done" || j.state === "error") ? { state: "idle" } : j);
       if (j.state === "thinking" || j.state === "writing") { timer.current = setTimeout(() => poll(true), 600); return; }
-      if (announce && j.state === "done") { toast("Ответ готов — гейты посчитаны"); router.refresh(); }
+      if (announce && j.state === "done") {
+        if (j.cut) toast("Ответ оборван лимитом длины — сгенерируй ещё раз или допиши вручную", "error");
+        else toast(`Ответ готов · $${(j.cost ?? 0).toFixed(3)}${j.thinkingTokens ? ` · ${j.thinkingTokens.toLocaleString("ru")} ток. ушло на размышления` : ""}`);
+        router.refresh();
+      }
       if (announce && j.state === "error") toast(j.error ?? "Ошибка генерации", "error");
     } catch {
       timer.current = setTimeout(() => poll(announce), 1500);
@@ -84,9 +89,14 @@ export function LivePanel({ v, onDismiss }: { v: LiveView; onDismiss: () => void
           {busy ? <span className="live-orb" aria-hidden /> : v.state === "done" ? <CircleCheck size={18} className="text-malachite" /> : <CircleX size={18} className="text-cinnabar" />}
           <div>
             <div className="text-[0.92rem] text-bone" aria-live="polite">
-              {v.state === "thinking" ? <>{phase}<span className="live-dots" /></> : v.state === "writing" ? <>{v.model} пишет ответ<span className="live-dots" /></> : v.state === "done" ? "Ответ готов" : "Генерация прервалась"}
+              {v.state === "thinking" ? (v.phase === "thinking" ? <>{v.model} размышляет над ответом<span className="live-dots" /></> : <>{phase}<span className="live-dots" /></>)
+                : v.state === "writing" ? <>{v.model} пишет ответ<span className="live-dots" /></> : v.state === "done" ? (v.cut ? "Ответ оборван лимитом длины" : "Ответ готов") : "Генерация прервалась"}
             </div>
-            <div className="text-[0.75rem] text-fog">{busy ? "Можно уйти со страницы — ответ сохранится сам" : v.state === "done" ? "Сохранён как новая попытка, гейты посчитаны" : v.error}</div>
+            <div className={clsx("text-[0.75rem]", v.cut ? "text-ochre" : "text-fog")}>
+              {busy ? (v.phase === "thinking" ? `Размышления скрыты, но идут в счёт ответа · глубина ${v.effort === "low" ? "низкая" : "средняя"} · можно уйти со страницы` : "Можно уйти со страницы — ответ сохранится сам")
+                : v.state === "done" ? (v.cut ? "Сгенерируй ещё раз или допиши вручную" : `Сохранён как новая попытка, гейты посчитаны${v.thinkingTokens ? ` · из ${(v.outTokens ?? 0).toLocaleString("ru")} токенов ${v.thinkingTokens.toLocaleString("ru")} ушло на размышления` : ""}`)
+                : v.error}
+            </div>
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8rem] tabular-nums text-mist">

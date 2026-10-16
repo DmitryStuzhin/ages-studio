@@ -1,6 +1,6 @@
 import "server-only";
 import { anthropicConfigured, anthropicStream } from "@/lib/integrations/anthropic";
-import { stepDef, MODEL_PRICES, type ProjectKind } from "@/lib/pipeline/steps";
+import { stepDef, MODEL_PRICES, budgetFor, type ProjectKind } from "@/lib/pipeline/steps";
 import { requireProject, saveOutput } from "./service";
 import { buildPrompt } from "./context";
 import { getSettings } from "./repo";
@@ -13,6 +13,7 @@ export type LiveJob = {
   projectId: number; stepKey: string; model: string; tier: string;
   startedAt: number; firstTokenAt: number | null; finishedAt: number | null;
   text: string; inTokens: number; outTokens: number; expectedOut: number; maxOut: number;
+  phase: "start" | "thinking" | "writing"; effort: string; thinkingTokens: number; cut: boolean;
   error: string | null; runId: number | null; priceIn: number; priceOut: number;
 };
 
@@ -37,18 +38,22 @@ export async function startLive(projectId: number, stepKey: string) {
   const settings = await getSettings();
   const { system, user } = await buildPrompt(projectId, stepKey);
   const price = MODEL_PRICES[def.tier];
-  const maxOut = Math.min(64000, def.outTokens * 2);
+  const b = budgetFor(def);
+  const maxOut = b.maxTokens;
   const job: LiveJob = {
     projectId, stepKey, model: price.name, tier: def.tier, startedAt: Date.now(), firstTokenAt: null, finishedAt: null,
     text: "", inTokens: Math.round((system.length + user.length) / 3.2), outTokens: 0, expectedOut: Math.round(def.outTokens * 0.5), maxOut,
     error: null, runId: null, priceIn: price.input, priceOut: price.output,
+    phase: "start", effort: b.effort, thinkingTokens: 0, cut: false,
   };
   jobs.set(keyOf(projectId, stepKey), job);
   (async () => {
     try {
-      const r = await anthropicStream({ system, user, model: settings.models[def.tier], maxTokens: maxOut }, {
+      const r = await anthropicStream({ system, user, model: settings.models[def.tier], maxTokens: maxOut, effort: b.effort }, {
+        phase: (p) => { job.phase = p; },
         text: (t) => {
           job.firstTokenAt ??= Date.now();
+          job.phase = "writing";
           job.text += t;
           job.outTokens = Math.max(job.outTokens, Math.round(job.text.length / 3.2));
         },
@@ -57,6 +62,8 @@ export async function startLive(projectId: number, stepKey: string) {
       const saved = await saveOutput(projectId, stepKey, r.text, "api", { model: r.model, inputTokens: r.inputTokens, outputTokens: r.outputTokens });
       job.runId = (saved as { id?: number } | undefined)?.id ?? null;
       job.outTokens = r.outputTokens || job.outTokens;
+      job.thinkingTokens = r.thinkingTokens ?? 0;
+      job.cut = r.stop === "max_tokens";
     } catch (e) {
       job.error = e instanceof Error ? e.message : String(e);
     } finally {

@@ -6,7 +6,19 @@ import path from "node:path";
 // Конституция уходит в system с cache_control — повторные вызовы читают её из кеша
 // (на Opus 5.5 и Sonnet 5.5 чтение кеша — 5% цены входа).
 
-export type LLMResult = { text: string; inputTokens: number; outputTokens: number; cacheRead: number; model: string };
+export type LLMResult = { text: string; inputTokens: number; outputTokens: number; cacheRead: number; model: string; thinkingTokens?: number; stop?: string | null };
+export type Effort = "low" | "medium" | "high";
+type GenOpts = { system: string; user: string; model: string; maxTokens: number; effort?: Effort };
+
+// Модели 5.5 перед ответом размышляют (adaptive thinking). Размышления не видны, но тратят тот же лимит
+// max_tokens и оплачиваются как выход. Глубину задаёт effort; лимит шага поднят на запас под размышления.
+const body = (o: GenOpts, stream: boolean) => JSON.stringify({
+  model: o.model, max_tokens: o.maxTokens, ...(stream ? { stream: true } : {}),
+  thinking: { type: "adaptive" }, output_config: { effort: o.effort ?? "medium" },
+  system: [{ type: "text", text: o.system, cache_control: { type: "ephemeral" } }],
+  messages: [{ role: "user", content: o.user }],
+});
+const CUT = "\n\n[Ответ оборван лимитом длины — нажми «Сгенерировать» ещё раз или допиши вручную.]";
 
 // Ключ: из окружения или из .env.local платформы, который пишет поле в Настройках.
 // Файл читается при каждом вызове — новый ключ работает без перезапуска.
@@ -65,7 +77,7 @@ export async function saveAnthropicKey(key: string) {
   return models;
 }
 
-export async function anthropicGenerate(opts: { system: string; user: string; model: string; maxTokens: number }): Promise<LLMResult> {
+export async function anthropicGenerate(opts: GenOpts): Promise<LLMResult> {
   const { key } = anthropicKey();
   if (!key) throw new Error("Claude API не подключён: вставь ключ в Настройках → Claude API.");
   const res = await fetch(`${API}/v1/messages`, {
@@ -75,12 +87,7 @@ export async function anthropicGenerate(opts: { system: string; user: string; mo
       "x-api-key": key,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify({
-      model: opts.model,
-      max_tokens: opts.maxTokens,
-      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: opts.user }],
-    }),
+    body: body(opts, false),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -88,11 +95,12 @@ export async function anthropicGenerate(opts: { system: string; user: string; mo
   }
   const data = (await res.json()) as {
     content: { type: string; text?: string }[];
-    usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number };
-    model: string;
+    usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; output_tokens_details?: { thinking_tokens?: number } };
+    model: string; stop_reason?: string;
   };
   return {
-    text: data.content.filter((c) => c.type === "text").map((c) => c.text).join("\n"),
+    text: data.content.filter((c) => c.type === "text").map((c) => c.text).join("\n") + (data.stop_reason === "max_tokens" ? CUT : ""),
+    thinkingTokens: data.usage.output_tokens_details?.thinking_tokens ?? 0, stop: data.stop_reason ?? null,
     inputTokens: data.usage.input_tokens,
     outputTokens: data.usage.output_tokens,
     cacheRead: data.usage.cache_read_input_tokens ?? 0,
@@ -102,24 +110,20 @@ export async function anthropicGenerate(opts: { system: string; user: string; mo
 
 /** То же, что anthropicGenerate, но ответ приходит по кускам: onText вызывается на каждый фрагмент текста. */
 export async function anthropicStream(
-  opts: { system: string; user: string; model: string; maxTokens: number },
-  on: { text: (t: string) => void; usage?: (u: { input?: number; output?: number }) => void },
+  opts: GenOpts,
+  on: { text: (t: string) => void; usage?: (u: { input?: number; output?: number }) => void; phase?: (p: "thinking" | "writing") => void },
 ): Promise<LLMResult> {
   const { key } = anthropicKey();
   if (!key) throw new Error("Claude API не подключён: вставь ключ в Настройках → Claude API.");
   const res = await fetch(`${API}/v1/messages`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: opts.model, max_tokens: opts.maxTokens, stream: true,
-      system: [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: opts.user }],
-    }),
+    body: body(opts, true),
   });
   if (!res.ok || !res.body) throw new Error(explain(res.status, await res.text()));
   const reader = res.body.getReader();
   const dec = new TextDecoder();
-  let buf = "", text = "", model = opts.model, input = 0, output = 0, cacheRead = 0, stop: string | null = null;
+  let buf = "", text = "", model = opts.model, input = 0, output = 0, cacheRead = 0, thinking = 0, stop: string | null = null;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -130,18 +134,21 @@ export async function anthropicStream(
       buf = buf.slice(i + 2);
       const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
       if (!data) continue;
-      let ev: { type: string; delta?: { type?: string; text?: string; stop_reason?: string }; usage?: { output_tokens?: number }; message?: { model?: string; usage?: { input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number } }; error?: { message?: string } };
+      let ev: { type: string; content_block?: { type?: string }; delta?: { type?: string; text?: string; stop_reason?: string }; usage?: { output_tokens?: number; output_tokens_details?: { thinking_tokens?: number } }; message?: { model?: string; usage?: { input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number } }; error?: { message?: string } };
       try { ev = JSON.parse(data); } catch { continue; }
       if (ev.type === "message_start" && ev.message) {
         model = ev.message.model ?? model;
         input = ev.message.usage?.input_tokens ?? 0;
         cacheRead = ev.message.usage?.cache_read_input_tokens ?? 0;
         on.usage?.({ input: input + cacheRead });
+      } else if (ev.type === "content_block_start") {
+        on.phase?.(ev.content_block?.type === "thinking" || ev.content_block?.type === "redacted_thinking" ? "thinking" : "writing");
       } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) {
         text += ev.delta.text;
         on.text(ev.delta.text);
       } else if (ev.type === "message_delta") {
         output = ev.usage?.output_tokens ?? output;
+        thinking = ev.usage?.output_tokens_details?.thinking_tokens ?? thinking;
         stop = ev.delta?.stop_reason ?? stop;
         on.usage?.({ output });
       } else if (ev.type === "error") {
@@ -149,6 +156,6 @@ export async function anthropicStream(
       }
     }
   }
-  if (stop === "max_tokens") text += "\n\n[Ответ оборван лимитом длины — нажми «Сгенерировать» ещё раз или допиши вручную.]";
-  return { text, inputTokens: input, outputTokens: output, cacheRead, model };
+  if (stop === "max_tokens") text += CUT;
+  return { text, inputTokens: input, outputTokens: output, cacheRead, model, thinkingTokens: thinking, stop };
 }
