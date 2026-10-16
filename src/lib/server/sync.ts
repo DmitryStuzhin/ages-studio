@@ -303,7 +303,7 @@ async function syncAnalytics(auth: GoogleAuth, log: Log) {
         const browse = (traffic.SUBSCRIBER ?? 0) + (traffic.RELATED_VIDEO ?? 0);
         await db.insert(schema.metrics).values({
           projectId: p.id, day: m, source: "api",
-          views: t ? Number(t.views) : null,
+          views: t ? Number(t.engagedViews ?? t.views) : null,
           browseViews: browse,
           shortsViews: traffic.SHORTS ?? 0,
           avgViewPct: t ? Math.round(Number(t.averageViewPercentage) * 10) / 10 : null,
@@ -336,19 +336,27 @@ async function saveReport(key: ReportKey, data: unknown) {
 
 /** Всё, что отдаёт Analytics API по каналу: каждый отчёт отдельно, падение одного не мешает остальным. */
 async function syncChannelReports(ya: YouTubeAnalytics, log: Log) {
+  // Для шортсов YouTube с апреля 2025 считает в views каждый запуск; engagedViews — по-старому,
+  // только просмотры, которые реально посмотрели (они и идут в зачёт монетизации). Для лонгов они равны.
+  // Если отчёт с engagedViews не поддерживается, берём без него.
+  const rep = async (q: Record<string, string>) => {
+    if (!/(^|,)views(,|$)/.test(q.metrics)) return ya.report(q);
+    try { return await ya.report({ ...q, metrics: q.metrics.replace(/(^|,)views(,|$)/, "$1engagedViews,views$2") }); } catch { return ya.report(q); }
+  };
+
   const now = new Date();
   const end = day(now);
   const start365 = day(addDays(now, -365));
   const start90 = day(addDays(now, -90));
   const jobs: [ReportKey, string, () => Promise<unknown>][] = [
-    ["daily", "динамика по дням (лонги и шортсы)", () => ya.report({ startDate: start365, endDate: end, dimensions: "day,creatorContentType", metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost", sort: "day" })],
-    ["traffic", "источники трафика", () => ya.report({ startDate: start90, endDate: end, dimensions: "insightTrafficSourceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
-    ["country", "география", () => ya.report({ startDate: start90, endDate: end, dimensions: "country", metrics: "views,estimatedMinutesWatched,averageViewDuration", sort: "-views", maxResults: "12" })],
+    ["daily", "динамика по дням (лонги и шортсы)", () => rep({ startDate: start365, endDate: end, dimensions: "day,creatorContentType", metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost", sort: "day" })],
+    ["traffic", "источники трафика", () => rep({ startDate: start90, endDate: end, dimensions: "insightTrafficSourceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+    ["country", "география", () => rep({ startDate: start90, endDate: end, dimensions: "country", metrics: "views,estimatedMinutesWatched,averageViewDuration", sort: "-views", maxResults: "12" })],
     ["demographics", "возраст и пол", () => ya.report({ startDate: start90, endDate: end, dimensions: "ageGroup,gender", metrics: "viewerPercentage" })],
-    ["device", "устройства", () => ya.report({ startDate: start90, endDate: end, dimensions: "deviceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
-    ["topVideos", "топ роликов по времени просмотра", () => ya.report({ startDate: start90, endDate: end, dimensions: "video", metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,likes,shares", sort: "-estimatedMinutesWatched", maxResults: "25" })],
-    ["subscribed", "подписчики и новые зрители", () => ya.report({ startDate: start90, endDate: end, dimensions: "subscribedStatus", metrics: "views,estimatedMinutesWatched,averageViewDuration" })],
-    ["playback", "где смотрят", () => ya.report({ startDate: start90, endDate: end, dimensions: "insightPlaybackLocationType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+    ["device", "устройства", () => rep({ startDate: start90, endDate: end, dimensions: "deviceType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
+    ["topVideos", "топ роликов по времени просмотра", () => rep({ startDate: start90, endDate: end, dimensions: "video", metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,likes,shares", sort: "-estimatedMinutesWatched", maxResults: "25" })],
+    ["subscribed", "подписчики и новые зрители", () => rep({ startDate: start90, endDate: end, dimensions: "subscribedStatus", metrics: "views,estimatedMinutesWatched,averageViewDuration" })],
+    ["playback", "где смотрят", () => rep({ startDate: start90, endDate: end, dimensions: "insightPlaybackLocationType", metrics: "views,estimatedMinutesWatched", sort: "-views" })],
   ];
   const ok: string[] = [];
   for (const [key, label, fn] of jobs) {

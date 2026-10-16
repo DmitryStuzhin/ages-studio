@@ -7,6 +7,8 @@ export type DayPoint = {
   day: string; // YYYY-MM-DD
   longViews: number;
   shortViews: number;
+  /** Все запуски шортсов (новый счётчик YouTube). shortViews — засчитываемые (engagedViews), если отчёт их отдал. */
+  shortStarts: number;
   longHours: number;
   shortHours: number;
   subsGained: number;
@@ -22,12 +24,13 @@ export function dailySeries(rows: Row[] | undefined): DayPoint[] {
   const by = new Map<string, DayPoint>();
   for (const r of rows) {
     const d = String(r.day);
-    const p = by.get(d) ?? { day: d, longViews: 0, shortViews: 0, longHours: 0, shortHours: 0, subsGained: 0, subsLost: 0 };
+    const p = by.get(d) ?? { day: d, longViews: 0, shortViews: 0, shortStarts: 0, longHours: 0, shortHours: 0, subsGained: 0, subsLost: 0 };
     if (isShort(r.creatorContentType)) {
-      p.shortViews += num(r.views);
+      p.shortViews += r.engagedViews != null ? num(r.engagedViews) : num(r.views);
+      p.shortStarts += num(r.views);
       p.shortHours += num(r.estimatedMinutesWatched) / 60;
     } else {
-      p.longViews += num(r.views);
+      p.longViews += r.engagedViews != null ? num(r.engagedViews) : num(r.views);
       p.longHours += num(r.estimatedMinutesWatched) / 60;
     }
     p.subsGained += num(r.subscribersGained);
@@ -40,7 +43,7 @@ export function dailySeries(rows: Row[] | undefined): DayPoint[] {
   const last = new Date(days.at(-1)! + "T00:00:00Z");
   while (cur <= last) {
     const d = cur.toISOString().slice(0, 10);
-    out.push(by.get(d) ?? { day: d, longViews: 0, shortViews: 0, longHours: 0, shortHours: 0, subsGained: 0, subsLost: 0 });
+    out.push(by.get(d) ?? { day: d, longViews: 0, shortViews: 0, shortStarts: 0, longHours: 0, shortHours: 0, subsGained: 0, subsLost: 0 });
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return out;

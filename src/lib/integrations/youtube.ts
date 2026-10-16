@@ -241,10 +241,10 @@ export class YouTubeAnalytics {
 
   /** Итоги ролика за период с даты публикации. */
   async videoTotals(videoId: string, start: string, end: string) {
-    const [row] = await this.report({
-      startDate: start, endDate: end, filters: `video==${videoId}`,
-      metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained",
-    });
+    const base = { startDate: start, endDate: end, filters: `video==${videoId}` };
+    const m = "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained";
+    // engagedViews — засчитываемые просмотры (для шортсов меньше, чем запуски); для лонгов равен views.
+    const [row] = await this.report({ ...base, metrics: `engagedViews,${m}` }).catch(() => this.report({ ...base, metrics: m }));
     return row ?? null;
   }
 

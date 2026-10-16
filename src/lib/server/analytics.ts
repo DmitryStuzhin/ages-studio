@@ -9,6 +9,8 @@ import {
 } from "@/lib/stats";
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
+/** Засчитываемые просмотры: engagedViews, если YouTube их отдал, иначе views. */
+const ev = (r: Row) => (r.engagedViews != null ? n(r.engagedViews) : n(r.views));
 
 /** Всё для Аналитики и Пульта одним вызовом. */
 export async function analyticsModel() {
@@ -32,22 +34,24 @@ export async function analyticsModel() {
   const views28 = { long: windowDelta(points, "longViews"), short: windowDelta(points, "shortViews") };
   const subs28 = { gained: windowDelta(points, "subsGained"), lost: windowDelta(points, "subsLost") };
   const shorts90 = sum(points.slice(-90), "shortViews");
+  const shortStarts28 = sum(points.slice(-28), "shortStarts");
+  const hasEngaged = ((reps.daily?.data ?? []) as Row[]).some((r) => r.engagedViews != null);
 
   const traffic = ((reps.traffic?.data ?? []) as Row[]).map((r) => ({
     key: String(r.insightTrafficSourceType), label: TRAFFIC_LABELS[String(r.insightTrafficSourceType)] ?? humanCode(String(r.insightTrafficSourceType)),
-    value: n(r.views), hours: n(r.estimatedMinutesWatched) / 60,
+    value: ev(r), hours: n(r.estimatedMinutesWatched) / 60,
   })).filter((r) => r.value > 0);
 
   const playback = ((reps.playback?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.insightPlaybackLocationType), label: PLAYBACK_LABELS[String(r.insightPlaybackLocationType)] ?? humanCode(String(r.insightPlaybackLocationType)), value: n(r.views),
+    key: String(r.insightPlaybackLocationType), label: PLAYBACK_LABELS[String(r.insightPlaybackLocationType)] ?? humanCode(String(r.insightPlaybackLocationType)), value: ev(r),
   })).filter((r) => r.value > 0);
 
   const devices = ((reps.device?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.deviceType), label: DEVICE_LABELS[String(r.deviceType)] ?? humanCode(String(r.deviceType)), value: n(r.views),
+    key: String(r.deviceType), label: DEVICE_LABELS[String(r.deviceType)] ?? humanCode(String(r.deviceType)), value: ev(r),
   })).filter((r) => r.value > 0);
 
   const countries = ((reps.country?.data ?? []) as Row[]).map((r) => ({
-    key: String(r.country), label: countryName(String(r.country)), value: n(r.views),
+    key: String(r.country), label: countryName(String(r.country)), value: ev(r),
     sub: `${(n(r.estimatedMinutesWatched) / 60).toFixed(1).replace(".", ",")} ч · ${Math.round(n(r.averageViewDuration))} с в среднем`,
   }));
 
@@ -63,14 +67,14 @@ export async function analyticsModel() {
   }
   const ages = [...ageMap.values()].sort((a, b) => a.age.localeCompare(b.age));
 
-  const subscribed = Object.fromEntries(((reps.subscribed?.data ?? []) as Row[]).map((r) => [String(r.subscribedStatus), { views: n(r.views), hours: n(r.estimatedMinutesWatched) / 60, avg: n(r.averageViewDuration) }]));
+  const subscribed = Object.fromEntries(((reps.subscribed?.data ?? []) as Row[]).map((r) => [String(r.subscribedStatus), { views: ev(r), hours: n(r.estimatedMinutesWatched) / 60, avg: n(r.averageViewDuration) }]));
 
   const titles = new Map(videos.map((v) => [v.videoId, v]));
   const topVideos = ((reps.topVideos?.data ?? []) as Row[]).map((r) => {
     const id = String(r.video);
     const v = titles.get(id);
     return {
-      id, title: v?.title ?? id, isShort: shortIds.has(id), views: n(r.views), hours: n(r.estimatedMinutesWatched) / 60,
+      id, title: v?.title ?? id, isShort: shortIds.has(id), views: ev(r), starts: n(r.views), hours: n(r.estimatedMinutesWatched) / 60,
       avgPct: n(r.averageViewPercentage), avgSec: n(r.averageViewDuration), subs: n(r.subscribersGained), likes: n(r.likes), shares: n(r.shares),
     };
   });
@@ -98,7 +102,7 @@ export async function analyticsModel() {
 
   return {
     settings, snaps, points, hasReports: points.length > 0, fetchedAt: reps.daily?.fetchedAt ?? null,
-    subsNow, hoursNow, hoursForecast, subsForecast, views28, subs28, shorts90,
+    subsNow, hoursNow, hoursForecast, subsForecast, views28, subs28, shorts90, shortStarts28, hasEngaged,
     traffic, playback, devices, countries, ages, subscribed, topVideos, avgViewPctLong,
     weekday: weekdayProfile(points),
     videos, deltaFor,

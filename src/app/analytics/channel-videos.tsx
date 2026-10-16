@@ -31,7 +31,7 @@ export function ChannelVideos({ longs, shorts }: { longs: V[]; shorts: V[] }) {
           ))}
         </div>
         <div className="flex items-center gap-3 text-sm text-fog">
-          <span>{compact(total)} просмотров</span>
+          <span title={tab === "short" ? "Публичный счётчик YouTube: у шортсов это все запуски, включая пролистанные. Засчитанные просмотры — в графиках выше." : undefined}>{compact(total)} {tab === "short" ? "запусков" : "просмотров"}</span>
           <select className="field !w-auto !py-1.5" value={sort} onChange={(e) => setSort(e.target.value as keyof typeof SORTS)} aria-label="Сортировка">
             {Object.entries(SORTS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
@@ -48,7 +48,7 @@ export function ChannelVideos({ longs, shorts }: { longs: V[]; shorts: V[] }) {
             badge={v.duration ? <OverlayChip>{v.duration}</OverlayChip> : undefined}
             meta={v.published}
             stats={<>
-              <span><span className="text-bone">{compact(v.views)}</span> просм.</span>
+              <span title={tab === "short" ? "Счётчик YouTube: все запуски, включая пролистанные" : undefined}><span className="text-bone">{compact(v.views)}</span> {tab === "short" ? "запусков" : "просм."}</span>
               {v.d1 != null && v.d1 > 0 && <span className="text-malachite" title="Просмотров за последние сутки">+{compact(v.d1)} за сутки</span>}
               {v.d1 == null && v.d7 != null && v.d7 > 0 && <span className="text-malachite" title="Просмотров за неделю">+{compact(v.d7)} за неделю</span>}
               {tab === "long" && <span>♥ {v.likes ?? "—"}</span>}

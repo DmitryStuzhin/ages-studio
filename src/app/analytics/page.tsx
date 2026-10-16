@@ -79,7 +79,7 @@ export default async function AnalyticsPage() {
         <Kpi i={2} label="Просмотры лонгов, 28 дн." foot={<Delta d={m.views28.long.delta} />} spark={last28.map((p) => p.longViews)} color={SERIES.long}>
           <CountUp value={m.views28.long.cur} />
         </Kpi>
-        <Kpi i={3} label="Просмотры шортсов, 28 дн." foot={<Delta d={m.views28.short.delta} />} spark={last28.map((p) => p.shortViews)} color={SERIES.short}>
+        <Kpi i={3} label={m.hasEngaged ? "Засчитанные просмотры шортсов, 28 дн." : "Просмотры шортсов, 28 дн."} foot={<><Delta d={m.views28.short.delta} />{m.hasEngaged && m.shortStarts28 > m.views28.short.cur && <div className="mt-0.5 text-fog">запусков всего {compact(m.shortStarts28)}</div>}</>} spark={last28.map((p) => p.shortViews)} color={SERIES.short}>
           <CountUp value={m.views28.short.cur} />
         </Kpi>
         <Kpi i={4} label="Средний % досмотра лонгов" foot={<span className="text-fog">за 90 дней, взвешено по просмотрам</span>}>
@@ -99,7 +99,7 @@ export default async function AnalyticsPage() {
           <div className="mb-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
             <section className="reveal panel p-5" style={{ ["--i" as string]: 7 }}>
               <h2 className="mb-1 text-[1.2rem]">Просмотры по дням</h2>
-              <p className="mb-2 text-[0.82rem] text-fog">90 дней · всего {compact(last90.reduce((a, p) => a + p.longViews + p.shortViews, 0))}, из них шортсы {pct(last90.reduce((a, p) => a + p.shortViews, 0) / Math.max(1, last90.reduce((a, p) => a + p.longViews + p.shortViews, 0)))}</p>
+              <p className="mb-2 text-[0.82rem] text-fog">{m.hasEngaged ? "Засчитанные просмотры: шортсы без пролистываний (engagedViews), как их считает YouTube для монетизации" : "Шортсы пока по счётчику запусков — засчитанные появятся после следующего обновления"} · 90 дней · всего {compact(last90.reduce((a, p) => a + p.longViews + p.shortViews, 0))}, из них шортсы {pct(last90.reduce((a, p) => a + p.shortViews, 0) / Math.max(1, last90.reduce((a, p) => a + p.longViews + p.shortViews, 0)))}</p>
               <DailyViewsChart data={last90} />
             </section>
             <section className="reveal panel p-5" style={{ ["--i" as string]: 8 }}>
